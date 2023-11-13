@@ -89,7 +89,7 @@ class DataProcessor:
         self.post_output = '_mflux'+"{:.4f}".format(self.mean_flux)+\
         '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.redshift)
 
-        self.output_dir = self.output_dir+"/"+self.post_output+"/"
+        self.output_dir = self.output_dir.replace("/", "")+"_"+self.post_output+"/"
             
         # check if the directory exists, and if not, create it
         if not os.path.exists(self.output_dir):
@@ -112,9 +112,7 @@ class DataProcessor:
                 self.tempw = np.load(f)
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
-        
 
-        return
     
     
     def rescale_tau(self) -> float:
@@ -215,8 +213,6 @@ class DataProcessor:
             self.mean_flux += fdiff
             print('<F> =', np.round(self.mean_flux, 3),  np.round(np.mean(self.flux_rebin), 3), 
                   ', fdiff =', fdiff, ', bins =', self.bins)
-                    
-        return
 
 
     def scale_dataset(self) -> NoReturn:

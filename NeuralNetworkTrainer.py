@@ -113,14 +113,16 @@ class NeuralNetworkTrainer:
     def set_noise(self):        
         
         utilities = UtilityFunctions()
+        
+        print('noisey noise', self.noise_model)
     
-        if isinstance(self.noise_model, float):
+        if isinstance(self.noise_model, np.float32):
             self.snr = 1/self.noise_model
             print('fixed snr=', self.snr)
-            self.noise = np.full(self.flux.shape, self.noise_model)
+            self.noise = np.full(self.flux.shape, self.noise_model, dtype=np.float64)
         else:
             self.snr = np.int32(np.mean(1.0/self.noise_model[self.noise_model>0]))
-            self.noise = np.zeros(self.flux.shape)
+            self.noise = np.zeros(self.flux.shape, dtype=np.float64)
             
             #normalised the flux bins
             self.flux_bins = (self.flux_bins - self.flux_mean)/self.flux_var
@@ -132,6 +134,7 @@ class NeuralNetworkTrainer:
                 #noise to zero in bad pixels regions
                 self.noise[i][self.bad==1] = 0.0
   
+    
     def set_ml_model(self):    
             
         if 'ResNet' == self.network:
