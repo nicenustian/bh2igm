@@ -1,6 +1,6 @@
-from neural_network_trainer import NeuralNetworkTrainer
-from utility_functions import UtilityFunctions
-from data_processor import DataProcessor
+from NeuralNetworkTrainer import NeuralNetworkTrainer
+from UtilityFunctions import UtilityFunctions
+from DataProcessor import DataProcessor
 import sys
 import argparse
 import numpy as np
