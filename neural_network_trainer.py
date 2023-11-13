@@ -12,6 +12,8 @@ from utility_functions import UtilityFunctions
 
 class NeuralNetworkTrainer:
     def __init__(self, output_dir, quantity, redshift, obs_redshifts, fwhm, bins, 
+                 network, batch_size, lr, layers_per_block, features_per_block,
+                 epochs, patience_epochs, train_fraction,
                  flux, densityw, tempw, weights, flux_mean, flux_var,
                  noise_model, seed=12345, mean_flux=None, flux_bins=None, bad=None):
         
@@ -36,11 +38,17 @@ class NeuralNetworkTrainer:
             
         self.epoch = 0
         self.no_improvement_count = 0
-        self.patience_epochs = 10
-        self.epochs = 1000
+        self.patience_epochs = patience_epochs
+        self.epochs = epochs
         self.kll_fact = 1
         self.load_best_model = False
         self.train_fraction = 0.8
+        
+        self.network = network
+        self.layers_per_block = layers_per_block
+        self.features_per_block = features_per_block
+        self.batch_size = batch_size
+        self.lr  = lr
         
         self.best_metric = np.Infinity
         self.current_metric = np.Infinity
@@ -85,13 +93,6 @@ class NeuralNetworkTrainer:
         self.Nnodes = self.Npixels
         self.Ntrain = np.int32(self.Ntotal*self.train_fraction)
         self.Ntest = self.Ntotal - self.Ntrain
-        
-        self.network = "ConvNet"
-        self.layers_per_block = [2, 4]
-        self.features_per_block = [32, 64]
-        self.batch_size = 256
-        self.lr  = 1e-4
-        
         self.set_ml_model()
         self.set_dataset()
 
