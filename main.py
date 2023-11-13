@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=("arguments"))
     parser.add_argument("--epochs", default="10")
     parser.add_argument("--patience_epochs", default="20")
-    parser.add_argument("--seed", default="0")
+    parser.add_argument("--seed", default="12345")
     parser.add_argument("--redshift", default="4")
     parser.add_argument("--fwhm", default="6")
     parser.add_argument("--hubble", default="0.676")
