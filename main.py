@@ -10,10 +10,10 @@ absl.logging.set_verbosity(absl.logging.ERROR)
 
 def main():
 
-    parser = argparse.ArgumentParser(description=("arguments_for_input"))
+    parser = argparse.ArgumentParser(description=("arguments"))
     parser.add_argument("--epochs", default="10")
-    parser.add_argument("--patience_epochs", default="10")
-    parser.add_argument("--seed", default="12345")
+    parser.add_argument("--patience_epochs", default="20")
+    parser.add_argument("--seed", default="0")
     parser.add_argument("--redshift", default="5")
     parser.add_argument("--fwhm", default="6")
     parser.add_argument("--hubble", default="0.676")
