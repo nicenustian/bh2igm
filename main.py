@@ -26,7 +26,7 @@ def main():
     parser.add_argument("--mean_flux", default=None)
 
     parser.add_argument("--seed_int", default="12345")
-    parser.add_argument("--dataset_dir", default="skewers")
+    parser.add_argument("--dataset_dir", default="dataset")
     parser.add_argument("--output_dir", default="output")
     
     parser.add_argument("--network", default="ConvNet")
@@ -57,13 +57,12 @@ def main():
     seed_int = np.int32(args.seed_int)
     epochs = np.int32(args.epochs)
     epochs = np.int32(args.epochs)
-
     
     network = args.network
     batch_size = np.int32(args.batch_size)
     lr = np.float32(args.lr)
     layers_per_block = np.int32(args.layers_per_block)
-    features_per_block = np.int32(args.features_per_block)    
+    features_per_block = np.int32(args.features_per_block)
 
     utilities = UtilityFunctions()
 
@@ -72,17 +71,18 @@ def main():
     else:
         mean_flux = np.float32(args.mean_flux)
 
+
     dataset_dir = args.dataset_dir+"/"
     output_dir = args.output_dir+"/"
 
     print(
-        'epochs, patience_epochs,  dataset_dir = ', epochs, 
+        'epochs, patience_epochs,  dataset_dir = ', epochs,
         patience_epochs, dataset_dir
         )
 
     # collect, normalize and shape data for training and validation
     dp = DataProcessor(
-        dataset_dir, output_dir, redshift,skewer_length, hubble, omegam, fwhm, 
+        dataset_dir, output_dir, redshift, skewer_length, hubble, omegam, fwhm, 
         bins, mean_flux, seed_int
         )
 
@@ -94,9 +94,8 @@ def main():
     
     ds = dp.get_dataset()
     nnt.set_dataset(ds[0], ds[1], ds[2], ds[3], ds[4], ds[5], 
-                    noise, None, None, train_fraction
+                    noise, None, train_fraction
         )
-
 
     nnt.set_ml_model(network, layers_per_block, features_per_block)
     nnt.train(epochs, patience_epochs, batch_size, lr)

@@ -41,6 +41,7 @@ class DataProcessor:
         self.temp = np.array([])
         self.densityw = np.array([])
         self.tempw = np.array([])
+        self.weights = np.array([])
         
         self.densityw_rebin = np.array([])
         self.tempw_rebin = np.array([])
@@ -111,15 +112,18 @@ class DataProcessor:
         # check if the directory exists, and if not, create it
         if os.path.exists(self.dataset_dir):
             
+            # Load the named arrays
             with open(self.dataset_dir+self.filename, 'rb') as f:
-                self.opt = np.load(f)
-                self.density = np.load(f)
-                self.temp = np.load(f)
-                self.densityw = np.load(f)
-                self.tempw = np.load(f)
+                loaded_data = np.load(f)
+                        
+                self.opt = loaded_data['opt']
+                self.density = loaded_data['density']
+                self.temp = loaded_data['temp']
+                self.densityw = loaded_data['densityw']
+                self.tempw = loaded_data['tempw']
+                self.weights = loaded_data['weights']
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
-
     
     
     def rescale_tau(self) -> float:
@@ -173,8 +177,8 @@ class DataProcessor:
 
             #STEP 3: Rebin onto pixels
             #######################################################################
-            #sets the pixel size to sigma (based on FWHM)
-            #of width sigma = FWHM/[2*(2*ln2)^1/2] 
+            #pixel size to sigma
+            #of width sigma = fwhm/[2*(2*ln2)^1/2] 
 
             self.flux_rebin = np.zeros((num_of_los, self.bins))
             self.bins_ratio = (bins_old/self.bins) if bins_old>self.bins else (self.bins/bins_old)
@@ -262,15 +266,7 @@ class DataProcessor:
     def stack_dataset(self) -> NoReturn:
         
         initialised = False
-        no_weights  = True
-        
-        #filename = dataset_dir+'model_weights_z'+"{:.2f}".format(redshift)+'.npy'
-        #print(filename)
-        #with open(filename, 'rb') as f:
-        #     model_weights = np.load(f)
-            
-        #print('model weights ', model_weights, model_weights.shape, 'weights sum = ', np.sum(model_weights))
-        
+ 
         for mi, filename in enumerate(self.files_list):
             
             print()
@@ -280,10 +276,11 @@ class DataProcessor:
             self.read_skewers()
             self.process_skewers()
             
-            if no_weights:
-                self.weights = np.full(self.flux_rebin.shape, 1.0)
-            #else:
-            #    self.weights = np.full(self.flux.shape, model_weights[mi])
+            #print(self.weights)
+            # Check if weights are single valued for one model
+            # repeate weights over all skewers
+            #if isinstance(self.weights, float):
+            self.weights = np.full(self.flux_rebin.shape, self.weights)
 
             
             if initialised!=True:

@@ -43,9 +43,7 @@ class NeuralNetworkTrainer:
     def set_noise(self):        
         
         utilities = UtilityFunctions()
-        
-        print('noisey noise', self.noise_model)
-    
+            
         if isinstance(self.noise_model, np.float32):
             self.snr = 1/self.noise_model
             print('fixed snr=', self.snr)
@@ -94,7 +92,7 @@ class NeuralNetworkTrainer:
 
 
     def set_dataset(self, flux, densityw, tempw, weights, flux_mean, flux_var, 
-                    noise_model, flux_bins, bad, train_fraction
+                    noise_model, flux_bins, train_fraction
                   ):
       
       self.flux = flux
@@ -103,9 +101,7 @@ class NeuralNetworkTrainer:
       self.weights = weights
   
       self.noise_model = noise_model
-      self.flux_bins = flux_bins
-      self.bad = bad
-      
+      self.flux_bins = flux_bins      
       self.flux_mean = flux_mean
       self.flux_var = flux_var
       self.train_fraction = train_fraction
