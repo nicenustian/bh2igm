@@ -10,11 +10,9 @@ from numpy import random
 from UtilityFunctions import UtilityFunctions
 
 class NeuralNetworkTrainer:
-    def __init__(self, output_dir, quantity, redshift, obs_redshifts, fwhm, bins, 
-                 network, batch_size, lr, layers_per_block, features_per_block,
-                 epochs, patience_epochs, train_fraction,
-                 flux, densityw, tempw, weights, flux_mean, flux_var,
-                 noise_model, seed=12345, mean_flux=None, flux_bins=None, bad=None):
+    def __init__(self, output_dir, quantity, redshift, obs_redshifts, mean_flux,
+                 fwhm, bins, seed
+                 ):
         
         self.output_dir = output_dir
         self.quantity = quantity
@@ -22,79 +20,11 @@ class NeuralNetworkTrainer:
         self.obs_redshifts = obs_redshifts
         self.fwhm = fwhm
         self.bins = bins
-        
-        self.flux = flux
-        self.densityw = densityw
-        self.tempw = tempw
-        self.weights = weights
-    
-        self.noise_model = noise_model
-        self.seed = seed
-
         self.mean_flux = mean_flux
-        self.flux_bins = flux_bins
-        self.bad = bad
+        self.seed = seed
             
-        self.epoch = 0
-        self.no_improvement_count = 0
-        self.patience_epochs = patience_epochs
-        self.epochs = epochs
-        self.kll_fact = 1
         self.load_best_model = False
-        self.train_fraction = 0.8
-        
-        self.network = network
-        self.layers_per_block = layers_per_block
-        self.features_per_block = features_per_block
-        self.batch_size = batch_size
-        self.lr  = lr
-        
-        self.best_metric = np.Infinity
-        self.current_metric = np.Infinity
-        
-        self.mae = tf.keras.metrics.Mean()
-        self.nll_sum = tf.keras.metrics.Sum()
-        self.kll_sum = tf.keras.metrics.Sum()
-        self.count_sum = tf.keras.metrics.Sum()
-        
-        self.test_mae = tf.keras.metrics.Mean()
-        self.test_nll_sum = tf.keras.metrics.Sum()
-        self.test_kll_sum = tf.keras.metrics.Sum()
-        self.test_count_sum = tf.keras.metrics.Sum()
-        
-        self.loss_nll_list = []
-        self.loss_kll_list = []
-        self.mae_list = []
-        self.count_list = []
-        
-        self.test_loss_nll_list = []
-        self.test_loss_kll_list = []
-        self.test_mae_list = []
-        self.test_count_list = []
-        
-        self.flux_mean = flux_mean
-        self.flux_var = flux_var
-        self.type_casting = tf.float32
-        self.ml_model = []
-        
-        self.initalization()
-
-
-    def initalization(self):
-        
         self.set_seed()
-        self.set_noise()
-        self.post_output = '_snr'+str(np.int32(self.snr))+\
-        '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.obs_redshifts)
-        
-        self.Npixels = self.flux.shape[1]
-        self.Ntotal = self.flux.shape[0]
-        self.Nnodes = self.Npixels
-        self.Ntrain = np.int32(self.Ntotal*self.train_fraction)
-        self.Ntest = self.Ntotal - self.Ntrain
-        self.set_ml_model()
-        self.set_dataset()
-
 
         
     def set_seed(self):
@@ -135,29 +65,79 @@ class NeuralNetworkTrainer:
                 self.noise[i][self.bad==1] = 0.0
   
     
-    def set_ml_model(self):    
+    def set_ml_model(self, network, layers_per_block, features_per_block): 
+        
+        self.network = network
+        self.layers_per_block = layers_per_block
+        self.features_per_block = features_per_block
+        
             
         if 'ResNet' == self.network:
             
             self.ml_model  = ResNet(self.layers_per_block, 
                                     self.features_per_block, 
                                     self. Nnodes, self.seed)
-            print("network, layers, features, units, lr, batch_size = ", 
-                  self.network, self.layers_per_block, self.features_per_block, 
-                  self. Nnodes, self.lr, self.batch_size)
+
         elif  'ConvNet' == self.network:
             self.ml_model  = ConvNet(self.layers_per_block, 
                                      self.features_per_block, 
                                      self.Nnodes, self.seed)
-            print("network, layers, features, units, lr, batch_size = ", 
-                  self.network, self.layers_per_block, self.features_per_block, 
-                  self. Nnodes, self.lr, self.batch_size)
 
         else:
             raise ValueError('Unknown Network: {}'.format(self.network))
         
-        self.optimizer = tf.keras.optimizers.Adam(self.lr)
-        self.ml_model.compile(optimizer=self.optimizer)
+        
+                
+        print("network, layers, features, units, lr, batch_size = ", 
+                  self.network, self.layers_per_block, self.features_per_block, 
+                  self. Nnodes)
+
+
+    def set_dataset(self, flux, densityw, tempw, weights, flux_mean, flux_var, 
+                    noise_model, flux_bins, bad, train_fraction
+                  ):
+      
+      self.flux = flux
+      self.densityw = densityw
+      self.tempw = tempw
+      self.weights = weights
+  
+      self.noise_model = noise_model
+      self.flux_bins = flux_bins
+      self.bad = bad
+      
+      self.flux_mean = flux_mean
+      self.flux_var = flux_var
+      self.train_fraction = train_fraction
+      
+      self.Npixels = self.flux.shape[1]
+      self.Ntotal = self.flux.shape[0]
+      self.Nnodes = self.Npixels
+      self.Ntrain = np.int32(self.Ntotal*self.train_fraction)
+      self.Ntest = self.Ntotal - self.Ntrain
+      
+      self.set_noise()
+      self.post_output = '_snr'+str(np.int32(self.snr))+'_mflux'+"{:.4f}".format(self.mean_flux)+\
+      '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.obs_redshifts)
+
+      
+      if self.quantity=='densityw':
+          yy = self.densityw
+      elif self.quantity=='tempw':
+          yy = self.tempw
+      else:
+          raise ValueError('Unknown quantity: {}'.format(self.quantity))       
+   
+      self.flux = np.expand_dims(self.flux, axis=2)
+      self.noise = np.expand_dims(self.noise, axis=2)
+  
+      self.train_data = tf.data.Dataset.from_tensor_slices((
+          self.flux[:self.Ntrain], yy[:self.Ntrain], 
+          self.noise[:self.Ntrain],  self.weights[:self.Ntrain]))
+      self.test_data = tf.data.Dataset.from_tensor_slices((
+          self.flux[self.Ntrain:], yy[self.Ntrain:], 
+          self.noise[self.Ntrain:],  self.weights[self.Ntrain:]))
+
 
         
     @tf.function
@@ -232,27 +212,6 @@ class NeuralNetworkTrainer:
         self.test_count_sum.update_state(count_test)
         
         
-    def set_dataset(self):
-        
-        if self.quantity=='densityw':
-            yy = self.densityw
-        elif self.quantity=='tempw':
-            yy = self.tempw
-        else:
-            raise ValueError('Unknown quantity: {}'.format(self.quantity))       
-     
-        self.flux = np.expand_dims(self.flux, axis=2)
-        self.noise = np.expand_dims(self.noise, axis=2)
-    
-        self.train_data = tf.data.Dataset.from_tensor_slices((
-            self.flux[:self.Ntrain], yy[:self.Ntrain], 
-            self.noise[:self.Ntrain],  self.weights[:self.Ntrain]))
-        self.test_data = tf.data.Dataset.from_tensor_slices((
-            self.flux[self.Ntrain:], yy[self.Ntrain:], 
-            self.noise[self.Ntrain:],  self.weights[self.Ntrain:]))
-          
-        self.train_data = self.train_data.shuffle(self.Ntrain).batch(self.batch_size)
-        self.test_data = self.test_data.shuffle(self.Ntest).batch(self.batch_size)
 
     
     @tf.function
@@ -296,7 +255,35 @@ class NeuralNetworkTrainer:
                 (batch_size, self.Npixels, 1), 0, 1, tf.float64, seed=self.seed))
  
             self.test_model(x_batch_test, y_batch_test, w_batch_test)
-                
+    
+    def initialize_metrics(self):
+        
+        self.best_metric = np.Infinity
+        self.current_metric = np.Infinity
+        
+        self.mae = tf.keras.metrics.Mean()
+        self.nll_sum = tf.keras.metrics.Sum()
+        self.kll_sum = tf.keras.metrics.Sum()
+        self.count_sum = tf.keras.metrics.Sum()
+        
+        self.test_mae = tf.keras.metrics.Mean()
+        self.test_nll_sum = tf.keras.metrics.Sum()
+        self.test_kll_sum = tf.keras.metrics.Sum()
+        self.test_count_sum = tf.keras.metrics.Sum()
+        
+        self.loss_nll_list = []
+        self.loss_kll_list = []
+        self.mae_list = []
+        self.count_list = []
+        
+        self.test_loss_nll_list = []
+        self.test_loss_kll_list = []
+        self.test_mae_list = []
+        self.test_count_list = []
+
+        self.type_casting = tf.float32
+        
+            
     @tf.function
     def reset_metrics(self):                           
         self.nll_sum.reset_state()
@@ -334,9 +321,10 @@ class NeuralNetworkTrainer:
                 self.no_improvement_count = 0
                 self.best_metric = self.current_metric
 
-                weights_filename = self.output_dir+'nnweights_'+self.quantity+'/'
-                print('saving weights.. improved from', self.best_metric,
-                            'to', self.current_metric, weights_filename)
+                weights_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
+                print('saving weights.. improved from', 
+                      self.best_metric, 'to', self.current_metric, 
+                      weights_filename)
                 self.ml_model.save_weights(weights_filename)
         else:
                 self.no_improvement_count += 1
@@ -349,20 +337,24 @@ class NeuralNetworkTrainer:
        
         if len(self.loss_nll_list)>0:
             print('train', "nll = {:f}".format(self.loss_nll_list[-1]), 
-                      "kll = {:f}".format(self.loss_kll_list[-1]),
                           "mae = {:f}".format(self.mae_list[-1]), 
                           "sigma_cov = {:f}".format(self.count_list[-1]))
+            
+            if self.loss_kll_list[-1] !=0:
+                      print("kll = {:f}".format(self.loss_kll_list[-1]))
+
         
         if len(self.test_loss_nll_list)>0:
-            print('test',"nll = {:f}".format(self.test_loss_nll_list[-1]), 
-                      "kll = {:f}".format(self.test_loss_kll_list[-1]),
+            print(' test',"nll = {:f}".format(self.test_loss_nll_list[-1]), 
                           "mae = {:f}".format(self.test_mae_list[-1]), 
                           "sigma_cov = {:f}".format(self.test_count_list[-1]))
+            if self.test_loss_kll_list[-1] !=0:
+                      print("kll = {:f}".format(self.test_loss_kll_list[-1]))
         
         
     def save_history_file(self):
         #convert to numpy arrays and save the loss values
-        history_filename = self.output_dir+'history_'+self.quantity+'.npy'
+        history_filename = self.output_dir+'history_'+self.quantity+self.post_output+'.npy'
         print('saving ', history_filename)
         with open(history_filename, 'wb') as f:
             #the train metrics
@@ -377,15 +369,29 @@ class NeuralNetworkTrainer:
             np.save(f, np.array(self.test_count_list, dtype=np.float32))
 
 
-    def train(self):
+    def train(self, epochs, patience_epochs, batch_size, lr):
         
         if self.load_best_model==True:
-            ml_model_filename = self.output_dir+'nnweights_'+self.quantity+'/'
+            ml_model_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
             print('loading model ', ml_model_filename)
             self.ml_model.load_weights(ml_model_filename).expect_partial()   
 
         self.epoch = 0
         self.no_improvement_count = 0
+        self.patience_epochs = patience_epochs
+        self.batch_size = batch_size
+        self.lr  = lr
+        self.epochs = epochs
+        self.kll_fact = 1
+                  
+        self.train_data = self.train_data.shuffle(self.Ntrain).batch(self.batch_size)
+        self.test_data = self.test_data.shuffle(self.Ntest).batch(self.batch_size)
+        
+        
+        self.optimizer = tf.keras.optimizers.Adam(self.lr)
+        self.ml_model.compile(optimizer=self.optimizer)
+                
+        self.initialize_metrics()
         
         while ((self.epoch < self.epochs) and
         (self.no_improvement_count < self.patience_epochs)):
@@ -398,4 +404,4 @@ class NeuralNetworkTrainer:
             self.print_metrics(time.time()-start)     
             self.reset_metrics()
             
-        self.save_history_file()
+        # self.save_history_file()

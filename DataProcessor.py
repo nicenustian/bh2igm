@@ -66,11 +66,19 @@ class DataProcessor:
     
     @property
     def hubbleZ(self) -> float:
-        
         return self.hubble*100.*np.sqrt(self.omegam*np.power(1.+self.redshift, 3) + (1.-self.omegam))
 
+    def get_output_dir(self) -> str:
+        return self.output_dir
+    
+    def get_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
+                                   np.ndarray, float, float]:
+        return self.flux_dataset, self.densityw_dataset, \
+    self.tempw_dataset, self.weights_dataset, self.flux_scaler_mean, \
+    self.flux_scaler_var
+
+
     def get_files_list(self) -> NoReturn:
-        
         if os.path.exists(self.dataset_dir):
         
             file_list = os.listdir(self.dataset_dir)
@@ -89,7 +97,7 @@ class DataProcessor:
         self.post_output = '_mflux'+"{:.4f}".format(self.mean_flux)+\
         '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.redshift)
 
-        self.output_dir = self.output_dir.replace("/", "")+"_"+self.post_output+"/"
+        self.output_dir = self.output_dir.replace("/", "")+self.post_output+"/"
             
         # check if the directory exists, and if not, create it
         if not os.path.exists(self.output_dir):
@@ -100,7 +108,6 @@ class DataProcessor:
     
     
     def read_skewers(self) -> NoReturn:
-        
         # check if the directory exists, and if not, create it
         if os.path.exists(self.dataset_dir):
             
@@ -307,8 +314,7 @@ class DataProcessor:
         self.weights_dataset = self.weights_dataset[index]
 
 
-    def make_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
-                                    np.ndarray, float, float]:
+    def make_dataset(self) -> NoReturn:
  
         self.stack_dataset()
         print()
@@ -326,6 +332,3 @@ class DataProcessor:
         print('datasets shapes ', self.flux_dataset.shape, 
               self.densityw_dataset.shape, 
               self.tempw_dataset.shape, self.weights_dataset.shape)
-
-        return self.flux_dataset, self.densityw_dataset, \
-   self.tempw_dataset, self.weights_dataset, self.flux_scaler_mean, self.flux_scaler_var
