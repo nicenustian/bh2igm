@@ -4,6 +4,36 @@ from typing import Union, Tuple, Any, Optional
 
 class UtilityFunctions:
     
+    def upsample_field(self, field, field_rebin, bins_ratio):
+        
+        bins_new = field_rebin.shape[1]
+        
+        # Ensure that the second axis of field_rebin is larger than the original
+        assert field_rebin.shape[1] > field.shape[0], "Second axis must be larger than the first axis."
+        
+        #upsampling
+        for ii in range(bins_new):
+            field_rebin[:, np.int32(
+                (ii*bins_ratio)):np.int32(((ii+1)*bins_ratio))] = \
+                np.expand_dims(field[:, ii], axis=1)
+
+         
+    
+    def downsample_field(self, field, field_rebin, bins_ratio):
+        
+        # Ensure that the second axis of field is larger than the rebinned
+        assert field_rebin.shape[1] < field.shape[0], "Second axis must be smaller than the original."
+        
+        
+        bins = field_rebin.shape[1]
+
+        for ii in range(bins):
+            field_rebin[:, ii] = np.mean(
+                field[:, np.int32(
+                    (ii*bins_ratio)):np.int32(((ii+1)*bins_ratio))], axis=1)
+         
+        
+    
     def closest_argmin(self, A, B):
         L = B.size
         sidx_B = B.argsort()

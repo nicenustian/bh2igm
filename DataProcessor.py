@@ -3,6 +3,7 @@ import numpy as np
 import os
 from scipy.ndimage import convolve1d
 from typing import NoReturn, Union, Tuple, Any, Optional
+from UtilityFunctions import UtilityFunctions
 
 class DataProcessor:
     
@@ -59,6 +60,7 @@ class DataProcessor:
         self.filename = ''
         self.get_files_list()
         self.post_file_name()
+        self.uf  = UtilityFunctions()
     
 
     @property
@@ -184,18 +186,9 @@ class DataProcessor:
             self.bins_ratio = (bins_old/self.bins) if bins_old>self.bins else (self.bins/bins_old)
                
             if bins_old>self.bins:
-                 #down sampling
-                 for ii in range(self.bins):
-                         self.flux_rebin[:, ii] = np.mean(
-                                 flux_conv[:, np.int32(
-                                     (ii*self.bins_ratio)):np.int32(((ii+1)*self.bins_ratio))], axis=1)
-         
+                self.uf.downsample_field(flux_conv, self.flux_rebin, self.bins_ratio)
             else:
-                #upsampling
-                for ii in range(bins_old):
-                    self.flux_rebin[:, np.int32(
-                        (ii*self.bins_ratio)):np.int32(((ii+1)*self.bins_ratio))] = \
-                    np.expand_dims(flux_conv[:, ii], axis=1)
+                self.uf.upsample_field(flux_conv, self.flux_rebin, self.bins_ratio)
 
 
             if iteration==0:
@@ -203,22 +196,14 @@ class DataProcessor:
                   self.densityw_rebin = np.zeros((num_of_los, self.bins))
                 
                   if bins_old>self.bins:
-                      for ii in range(self.bins):
-                              self.tempw_rebin[:, ii] = np.mean(
-                                  self.tempw[:, np.int32((ii*self.bins_ratio)):np.int32(
-                                      ((ii+1)*self.bins_ratio))], axis=1)
-                         
-                              self.densityw_rebin[:, ii] = np.mean(
-                                  self.densityw[:, np.int32((ii*self.bins_ratio)):np.int32(
-                                      ((ii+1)*self.bins_ratio))], axis=1)
-                             
+                      self.uf.downsample_field(self.densityw, self.densityw_rebin, self.bins_ratio)
+                      self.uf.downsample_field(self.tempw, self.tempw_rebin, self.bins_ratio)
                   else:
-                      for ii in range(bins_old):
-                          self.densityw_rebin[:, np.int32(np.round(ii*self.bins_ratio)):np.int32(
-                              np.round((ii+1)*self.bins_ratio))] = np.expand_dims(self.densityw[:, ii], axis=1)
-                          self.tempw_rebin[:, np.int32(np.round(ii*self.bins_ratio)):np.int32(
-                              np.round((ii+1)*self.bins_ratio))] = np.expand_dims(self.tempw[:, ii], axis=1)
+                      self.uf.upsample_field(self.densityw, self.densityw_rebin, self.bins_ratio)
+                      self.uf.upsample_field(self.tempw, self.tempw_rebin, self.bins_ratio)
 
+
+                      
             fdiff =  self.mean_flux - np.mean(self.flux_rebin)
             iteration += 1
             self.mean_flux += fdiff
