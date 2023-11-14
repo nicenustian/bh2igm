@@ -63,8 +63,7 @@ def main():
     batch_size = np.int32(args.batch_size)
     lr = np.float32(args.lr)
     layers_per_block = np.int32(args.layers_per_block)
-    features_per_block = np.int32(args.features_per_block)
-    
+    features_per_block = np.int32(args.features_per_block)    
 
     utilities = UtilityFunctions()
 
@@ -76,26 +75,31 @@ def main():
     dataset_dir = args.dataset_dir+"/"
     output_dir = args.output_dir+"/"
 
+    print(
+        'epochs, patience_epochs,  dataset_dir = ', epochs, 
+        patience_epochs, dataset_dir
+        )
 
-    print('epochs, patience_epochs,  dataset_dir = ',
-          epochs, patience_epochs, dataset_dir)
+    # collect, normalize and shape data for training and validation
+    dp = DataProcessor(
+        dataset_dir, output_dir, redshift,skewer_length, hubble, omegam, fwhm, 
+        bins, mean_flux, seed_int
+        )
 
-    # collect, normalize and shape data for traning and validation
-    data_processor = DataProcessor(dataset_dir, output_dir, redshift,
-                                   skewer_length, hubble, omegam, fwhm, bins,
-                                   mean_flux, seed_int)
+    dp.make_dataset()
 
-    flux, densityw, tempw, weights, flux_scaler_mean, flux_scaler_var = \
-        data_processor.make_dataset()
+    nnt = NeuralNetworkTrainer(
+        dp.get_output_dir(), "densityw", redshift, redshift, mean_flux, fwhm, bins, seed_int
+        )
+    
+    ds = dp.get_dataset()
+    nnt.set_dataset(ds[0], ds[1], ds[2], ds[3], ds[4], ds[5], 
+                    noise, None, None, train_fraction
+        )
 
-    neural_network_trainer = NeuralNetworkTrainer(
-        output_dir, "densityw", redshift, redshift, fwhm, bins,
-        network, batch_size, lr, layers_per_block, features_per_block,
-        epochs, patience_epochs, train_fraction,
-        flux, densityw, tempw, weights,
-        flux_scaler_mean, flux_scaler_var, noise_model=noise)
 
-    neural_network_trainer.train()
+    nnt.set_ml_model(network, layers_per_block, features_per_block)
+    nnt.train(epochs, patience_epochs, batch_size, lr)
 
 ###############################################################################
 
