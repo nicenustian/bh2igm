@@ -2,7 +2,7 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import os
 from scipy.ndimage import convolve1d
-from typing import NoReturn, Union, Tuple, Any, Optional
+from typing import NoReturn, Union, Tuple, Any, Optional, List
 from UtilityFunctions import UtilityFunctions
 
 class DataProcessor:
@@ -51,16 +51,16 @@ class DataProcessor:
         self.densityw_dataset = np.array([])
         self.tempw_dataset = np.array([])
         self.weights_dataset = np.array([])
-        
-        self.flux_scaler_mean = 1
-        self.flux_scaler_var = 1
+
         
         self.bins_ratio = 1
         self.foreground_mean_flux = 1
         self.filename = ''
-        self.get_files_list()
         self.post_file_name()
         self.uf  = UtilityFunctions()
+        self.files_list  = self.uf.get_files_list_from_dir(
+            self.dataset_dir, "dataset_",".npy")
+        self.total_models = len(self.files_list)
     
 
     @property
@@ -69,32 +69,19 @@ class DataProcessor:
     
     @property
     def hubbleZ(self) -> float:
-        return self.hubble*100.*np.sqrt(self.omegam*np.power(1.+self.redshift, 3) + (1.-self.omegam))
+        return self.hubble*100.*np.sqrt(
+            self.omegam*np.power(1.+self.redshift, 3) + (1.-self.omegam))
 
     def get_output_dir(self) -> str:
         return self.output_dir
+
     
     def get_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
                                    np.ndarray, float, float]:
         return self.flux_dataset, self.densityw_dataset, \
-    self.tempw_dataset, self.weights_dataset, self.flux_scaler_mean, \
-    self.flux_scaler_var
+    self.tempw_dataset, self.weights_dataset, self.scaler_mean, \
+    self.scaler_var
 
-
-    def get_files_list(self) -> NoReturn:
-        if os.path.exists(self.dataset_dir):
-        
-            file_list = os.listdir(self.dataset_dir)
-            # Filter files that do not end with ".npy"
-            filtered_files = [filename for filename in file_list if filename.endswith(".npy")]
-            self.files_list = filtered_files
-
-            self.total_models = len(self.files_list)
-        else:
-            raise ValueError('directory: {self.dataset_dir} doest not exist' )
-    
-        return 
-        
 
     def post_file_name(self) -> NoReturn:
         self.post_output = '_mflux'+"{:.4f}".format(self.mean_flux)+\
@@ -110,12 +97,12 @@ class DataProcessor:
             print(f"Directory '{self.output_dir}' already exists.")
     
     
-    def read_skewers(self) -> NoReturn:
+    def read_skewers(self, filename) -> NoReturn:
         # check if the directory exists, and if not, create it
         if os.path.exists(self.dataset_dir):
             
             # Load the named arrays
-            with open(self.dataset_dir+self.filename, 'rb') as f:
+            with open(self.dataset_dir+filename, 'rb') as f:
                 loaded_data = np.load(f)
                         
                 self.opt = loaded_data['opt']
@@ -124,6 +111,7 @@ class DataProcessor:
                 self.densityw = loaded_data['densityw']
                 self.tempw = loaded_data['tempw']
                 self.weights = loaded_data['weights']
+                self.flux = np.exp(-self.opt)
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
     
@@ -190,7 +178,6 @@ class DataProcessor:
             else:
                 self.uf.upsample_field(flux_conv, self.flux_rebin, self.bins_ratio)
 
-
             if iteration==0:
                   self.tempw_rebin = np.zeros((num_of_los, self.bins))
                   self.densityw_rebin = np.zeros((num_of_los, self.bins))
@@ -207,10 +194,23 @@ class DataProcessor:
             fdiff =  self.mean_flux - np.mean(self.flux_rebin)
             iteration += 1
             self.mean_flux += fdiff
-            print('<F> =', np.round(self.mean_flux, 3),  np.round(np.mean(self.flux_rebin), 3), 
+            print('<F> =', np.round(self.mean_flux, 3),  
+                  np.round(np.mean(self.flux_rebin), 3), 
                   ', fdiff =', fdiff, ', bins =', self.bins)
 
 
+    def save_processed_skewers(self, filename):
+        
+        save_file = self.output_dir+'/'+'processed_'+filename
+        print(self.flux.shape, self.densityw.shape, self.tempw.shape)
+        print('saving processed skewers file', save_file)
+        with open(save_file, 'wb') as f:
+            np.save(f, self.flux_rebin)
+            np.save(f, self.densityw_rebin)
+            np.save(f, self.tempw_rebin)
+
+        
+    
     def scale_dataset(self) -> NoReturn:
                 
         flux_scaler = StandardScaler()
@@ -233,20 +233,23 @@ class DataProcessor:
             self.densityw_dataset.reshape(-1,1)).reshape(self.densityw_dataset.shape)
         self.tempw_dataset = tempw_scaler.transform(
             self.tempw_dataset.reshape(-1,1)).reshape(self.tempw_dataset.shape)
+
         
-        self.flux_scaler_mean = flux_scaler.mean_
-        self.flux_scaler_var = flux_scaler.var_
+        self.scaler_mean = np.array([flux_scaler.mean_, 
+                                     densityw_scaler.mean_, 
+                                     tempw_scaler.mean_])
+
+
+        self.scaler_var = np.array([flux_scaler.var_, 
+                                     densityw_scaler.var_, 
+                                     tempw_scaler.var_])
         
                 
-        save_file = self.output_dir+'scaler'+self.post_output
+        save_file = self.output_dir+'scaler.npy'
         with open(save_file, 'wb') as f:
-            np.save(f, flux_scaler.mean_)
-            np.save(f, flux_scaler.var_)
-            np.save(f, densityw_scaler.mean_)
-            np.save(f, densityw_scaler.var_)
-            np.save(f, tempw_scaler.mean_)
-            np.save(f, tempw_scaler.var_)
-
+            np.save(f, self.scaler_mean)
+            np.save(f, self.scaler_var)
+            
 
     def stack_dataset(self) -> NoReturn:
         
@@ -258,14 +261,14 @@ class DataProcessor:
             print('reading/processing file', filename)
             
             self.filename = filename
-            self.read_skewers()
+            self.read_skewers(self.filename)
             self.process_skewers()
+            self.save_processed_skewers(self.filename)
             
-            #print(self.weights)
             # Check if weights are single valued for one model
             # repeate weights over all skewers
-            #if isinstance(self.weights, float):
-            self.weights = np.full(self.flux_rebin.shape, self.weights)
+            if self.weights.size ==1:
+                self.weights = np.full(self.flux_rebin.shape, self.weights)
 
             
             if initialised!=True:
@@ -311,6 +314,7 @@ class DataProcessor:
         print('after scaling mean (flux, densityw, tempw, weights)', 
               np.mean(self.flux_dataset), np.mean(self.densityw_dataset), 
               np.mean(self.tempw_dataset))
+        print('scalers', self.scaler_mean, self.scaler_var)
         print('datasets shapes ', self.flux_dataset.shape, 
               self.densityw_dataset.shape, 
               self.tempw_dataset.shape, self.weights_dataset.shape)

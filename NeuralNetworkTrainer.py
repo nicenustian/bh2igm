@@ -8,10 +8,11 @@ from machine_learning_models.ConvNet import ConvNet
 from machine_learning_models.ResNet import ResNet
 from numpy import random
 from UtilityFunctions import UtilityFunctions
+from QuantityPlotter import QuantityPlotter
 
 class NeuralNetworkTrainer:
     def __init__(self, output_dir, quantity, redshift, obs_redshifts, mean_flux,
-                 fwhm, bins, seed
+                 fwhm, bins, seed, not_observational=True, load_best_model=False
                  ):
         
         self.output_dir = output_dir
@@ -22,9 +23,11 @@ class NeuralNetworkTrainer:
         self.bins = bins
         self.mean_flux = mean_flux
         self.seed = seed
-            
-        self.load_best_model = False
+        self.not_observational = not_observational
+        self.load_best_model = load_best_model
         self.set_seed()
+        self.uf = UtilityFunctions()
+        self.qp = QuantityPlotter(2, 1, 28, 6, 20, 0.67)
 
         
     def set_seed(self):
@@ -68,7 +71,6 @@ class NeuralNetworkTrainer:
         self.network = network
         self.layers_per_block = layers_per_block
         self.features_per_block = features_per_block
-        
             
         if 'ResNet' == self.network:
             
@@ -83,15 +85,13 @@ class NeuralNetworkTrainer:
 
         else:
             raise ValueError('Unknown Network: {}'.format(self.network))
-        
-        
                 
         print("network, layers, features, units, lr, batch_size = ", 
                   self.network, self.layers_per_block, self.features_per_block, 
                   self. Nnodes)
 
 
-    def set_dataset(self, flux, densityw, tempw, weights, flux_mean, flux_var, 
+    def set_dataset(self, flux, densityw, tempw, weights, scalar_mean, scalar_var, 
                     noise_model, flux_bins, train_fraction
                   ):
       
@@ -102,8 +102,8 @@ class NeuralNetworkTrainer:
   
       self.noise_model = noise_model
       self.flux_bins = flux_bins      
-      self.flux_mean = flux_mean
-      self.flux_var = flux_var
+      self.scalar_mean = scalar_mean
+      self.scalar_var = scalar_var
       self.train_fraction = train_fraction
       
       self.Npixels = self.flux.shape[1]
@@ -134,14 +134,12 @@ class NeuralNetworkTrainer:
           self.flux[self.Ntrain:], yy[self.Ntrain:], 
           self.noise[self.Ntrain:],  self.weights[self.Ntrain:]))
 
-
         
     @tf.function
     def rolling(self, x_input, shifts):
             return tf.vectorized_map(
                 lambda x: tf.roll(x[0], shift=x[1], axis=0),
                 elems=[x_input, shifts])
-
 
     @tf.function
     def mae_func(self, y_true, y_pred):
@@ -189,7 +187,6 @@ class NeuralNetworkTrainer:
         self.kll_sum.update_state(loss_kll)
         self.count_sum.update_state(count)
         
-        
 
     @tf.function
     def test_model(self, x_test, y_test, w_test):
@@ -206,8 +203,6 @@ class NeuralNetworkTrainer:
         self.test_nll_sum.update_state(loss_nll_test)
         self.test_kll_sum.update_state(loss_kll_test)
         self.test_count_sum.update_state(count_test)
-        
-        
 
     
     @tf.function
@@ -226,7 +221,7 @@ class NeuralNetworkTrainer:
             x_batch = self.rolling(x_batch, shifts)
             y_batch = self.rolling(y_batch, shifts)
                         
-            x_batch += ((noise_batch/np.sqrt(self.flux_var))*tf.random.normal(
+            x_batch += ((noise_batch/np.sqrt(self.scalar_var[0]))*tf.random.normal(
                 (batch_size, self.Npixels, 1), 0, 1, tf.float64, seed=self.seed))
  
             self.train_model(x_batch, y_batch, w_batch)
@@ -247,7 +242,7 @@ class NeuralNetworkTrainer:
             x_batch_test = self.rolling(x_batch_test, shifts)
             y_batch_test = self.rolling(y_batch_test, shifts)
             
-            x_batch_test += ((noise_batch_test/np.sqrt(self.flux_var))*tf.random.normal(
+            x_batch_test += ((noise_batch_test/np.sqrt(self.scalar_var[0]))*tf.random.normal(
                 (batch_size, self.Npixels, 1), 0, 1, tf.float64, seed=self.seed))
  
             self.test_model(x_batch_test, y_batch_test, w_batch_test)
@@ -317,7 +312,8 @@ class NeuralNetworkTrainer:
                 self.no_improvement_count = 0
                 self.best_metric = self.current_metric
 
-                weights_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
+                print()
+                weights_filename = self.output_dir+'weights_'+self.quantity+'/'
                 print('saving weights.. improved from', 
                       self.best_metric, 'to', self.current_metric, 
                       weights_filename)
@@ -350,7 +346,7 @@ class NeuralNetworkTrainer:
         
     def save_history_file(self):
         #convert to numpy arrays and save the loss values
-        history_filename = self.output_dir+'history_'+self.quantity+self.post_output+'.npy'
+        history_filename = self.output_dir+'history_'+self.quantity+'.npy'
         print('saving ', history_filename)
         with open(history_filename, 'wb') as f:
             #the train metrics
@@ -364,14 +360,82 @@ class NeuralNetworkTrainer:
             np.save(f, np.array(self.test_mae_list, dtype=np.float32))
             np.save(f, np.array(self.test_count_list, dtype=np.float32))
 
-
-    def train(self, epochs, patience_epochs, batch_size, lr):
+    def predict(self):
         
+        file_list = self.uf.get_files_list_from_dir(self.output_dir, "processed_", ".npy")
+        self.load_best_weights()
+        
+        for model in file_list:
+        
+            filename = self.output_dir+model
+            print('opening processed skewers file', filename)
+  
+            try:
+                with open(filename, 'rb') as f:
+                    flux = np.load(f)
+                    densityw = np.load(f)
+                    tempw = np.load(f)
+            except FileNotFoundError as e:
+                print(f"Error: {e}")
+                        
+                
+            flux = (flux - self.scalar_mean[0]) / np.sqrt(self.scalar_var[0])
+            flux = np.expand_dims(flux, axis=2)
+            
+            dist = self.ml_model(tf.convert_to_tensor(flux), training=False)
+            mean = dist.mean().numpy()
+            std = dist.stddev().numpy()
+    
+            upper = mean + std
+            lower = mean - std
+            
+            if self.quantity=='densityw':
+                index = 1
+            else:
+                index = 2
+                
+    
+            mean = (mean * np.sqrt(self.scalar_var[index])) + self.scalar_mean[index]
+            upper = (upper * np.sqrt(self.scalar_var[index])) + self.scalar_mean[index]
+            lower = (lower * np.sqrt(self.scalar_var[index])) + self.scalar_mean[index]
+            
+            flux = flux * np.sqrt(self.scalar_var[0]) + self.scalar_mean[0]
+    
+            print('quantity actual and predicted')
+            if self.not_observational:
+                if self.quantity=='densityw':
+                    print('pred=',10**np.quantile(mean, [0.14, 0.5, 0.84]))
+                    print('actu=',10**np.quantile(densityw, [0.14, 0.5, 0.84]))
+                else:
+                    print('pred=',10**np.quantile(mean, [0.14, 0.5, 0.84]))
+                    print('actu=',10**np.quantile(tempw, [0.14, 0.5, 0.84]))
+            
+        
+            self.qp.set_dataset(flux, tempw, mean, upper, lower)
+            self.qp.plot_los(0)
+            self.qp.save_plot(self.output_dir+'los_'+self.quantity+'_'+model)
+            self.qp.clear_curves()
+                    
+            filename = self.output_dir+'predicted_'+self.quantity+'_'+model
+            print('saving ', filename)
+            with open(filename, 'wb') as f:
+                  np.save(f, mean)
+                  np.save(f, upper)
+                  np.save(f, lower)
+
+    def load_best_weights(self):
         if self.load_best_model==True:
             ml_model_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
             print('loading model ', ml_model_filename)
-            self.ml_model.load_weights(ml_model_filename).expect_partial()   
+            try:
+                self.ml_model.load_weights(ml_model_filename).expect_partial()
+            except FileNotFoundError as e:
+                print(f"Error: {e}")
 
+
+    def train(self, epochs, patience_epochs, batch_size, lr):
+        
+        self.load_best_weights()
         self.epoch = 0
         self.no_improvement_count = 0
         self.patience_epochs = patience_epochs
@@ -382,7 +446,6 @@ class NeuralNetworkTrainer:
                   
         self.train_data = self.train_data.shuffle(self.Ntrain).batch(self.batch_size)
         self.test_data = self.test_data.shuffle(self.Ntest).batch(self.batch_size)
-        
         
         self.optimizer = tf.keras.optimizers.Adam(self.lr)
         self.ml_model.compile(optimizer=self.optimizer)
@@ -400,4 +463,5 @@ class NeuralNetworkTrainer:
             self.print_metrics(time.time()-start)     
             self.reset_metrics()
             
-        # self.save_history_file()
+        self.save_history_file()
+            

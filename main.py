@@ -11,9 +11,7 @@ absl.logging.set_verbosity(absl.logging.ERROR)
 def main():
 
     parser = argparse.ArgumentParser(description=("arguments"))
-    parser.add_argument("--epochs", default="1000")
-    parser.add_argument("--noise", default="0.02")
-
+    parser.add_argument("--epochs", default="10")
     parser.add_argument("--patience_epochs", default="10")
     parser.add_argument("--train_fraction", default="0.8")
     parser.add_argument("--seed", default="12345")
@@ -24,6 +22,7 @@ def main():
     parser.add_argument("--skewer_length", default="20")
     parser.add_argument("--bins", default="1024")
     parser.add_argument("--mean_flux", default=None)
+    parser.add_argument("--noise", default="0.02")
 
     parser.add_argument("--seed_int", default="12345")
     parser.add_argument("--dataset_dir", default="dataset")
@@ -32,10 +31,12 @@ def main():
     parser.add_argument("--network", default="ConvNet")
     parser.add_argument("--batch_size", default="256")
     parser.add_argument("--lr", default="1e-4")
-    parser.add_argument('--features_per_block', action='store', default=[32, 64], 
+    parser.add_argument('--features_per_block', action='store', 
+                        default=[32, 64], 
                         type=int, nargs='*')
     
-    parser.add_argument('--layers_per_block', action='store', default=[2, 2], 
+    parser.add_argument('--layers_per_block', action='store', 
+                        default=[2, 2], 
                         type=int, nargs='*')
 
 
@@ -75,30 +76,30 @@ def main():
     dataset_dir = args.dataset_dir+"/"
     output_dir = args.output_dir+"/"
 
-    print(
-        'epochs, patience_epochs,  dataset_dir = ', epochs,
-        patience_epochs, dataset_dir
+    print('epochs, patience_epochs,  dataset_dir = ', epochs, 
+          patience_epochs, dataset_dir
         )
 
     # collect, normalize and shape data for training and validation
     dp = DataProcessor(
-        dataset_dir, output_dir, redshift, skewer_length, hubble, omegam, fwhm, 
-        bins, mean_flux, seed_int
+        dataset_dir, output_dir, redshift, skewer_length, hubble, 
+        omegam, fwhm, bins, mean_flux, seed_int
         )
 
     dp.make_dataset()
 
     nnt = NeuralNetworkTrainer(
-        dp.get_output_dir(), "densityw", redshift, redshift, mean_flux, fwhm, bins, seed_int
-        )
+         dp.get_output_dir(), "tempw", redshift, redshift, mean_flux, 
+         fwhm, bins, seed_int, True, False)
     
     ds = dp.get_dataset()
     nnt.set_dataset(ds[0], ds[1], ds[2], ds[3], ds[4], ds[5], 
-                    noise, None, train_fraction
-        )
-
+                     noise, None, train_fraction
+         )
+    
     nnt.set_ml_model(network, layers_per_block, features_per_block)
     nnt.train(epochs, patience_epochs, batch_size, lr)
+    nnt.predict()
 
 ###############################################################################
 
