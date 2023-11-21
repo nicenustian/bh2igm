@@ -1,5 +1,11 @@
 # lya-flux-to-density-temp-with-bayesian-networks
 
+
+<div align="center">
+  <video src="densityw.mov" width="400" />
+</div>
+
+    
 usage: main.py [-h] [--epochs EPOCHS] [--noise NOISE] [--patience_epochs PATIENCE_EPOCHS]
                [--train_fraction TRAIN_FRACTION] [--seed SEED] [--redshift REDSHIFT] [--fwhm FWHM]
                [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--bins BINS]
