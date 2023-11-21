@@ -2,7 +2,11 @@
 
 
 <div align="center">
-  <video src="densityw.mov" width="400" />
+  <video src="lya-flux-flow.mP4" width="400" />
+</div>
+
+<div align="center">
+  <video src="cnn_progress.mP4" width="400" />
 </div>
 
     
