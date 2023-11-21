@@ -1,7 +1,8 @@
-# lya-flux-to-density-temp-with-bayesian-networks
+# Using Bayesian network to predict Intergatalctic medium gas conditions using supermassive balck holes spectra
 
 # The output at the end of each layer with 2-layered convolutional network during training
-https://github.com/nicenustian/lya-flux-to-density-temp-with-bayesian-networks/assets/111900566/2a04ef9b-0441-4a32-bbf9-fe9873b44ec1
+https://github.com/nicenustian/lya-flux-to-density-temp-with-bayesian-networks/assets/111900566/1f08488b-1a3e-46ac-ac50-ae69d0a349d9
+
 
 
 # The output at each layer with 2-layered convolutional network during training
