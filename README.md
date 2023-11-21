@@ -7,6 +7,12 @@ usage: main.py [-h] [--epochs EPOCHS] [--noise NOISE] [--patience_epochs PATIENC
                [--output_dir OUTPUT_DIR] [--network NETWORK] [--batch_size BATCH_SIZE] [--lr LR]
                [--features_per_block [FEATURES_PER_BLOCK ...]] [--layers_per_block [LAYERS_PER_BLOCK ...]]
 
+
+<div align="center">
+  <video src="lya.mp4" width="400" />
+</div>
+
+
 ```command
 (base) mac-n-157:lya-flux-to-density-temp-with-bayesian-networks nasir$ python  main.py --epochs 10
 epochs, patience_epochs,  dataset_dir =  10 10 skewers/
