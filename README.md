@@ -1,13 +1,7 @@
 # lya-flux-to-density-temp-with-bayesian-networks
 
+https://github.com/nicenustian/lya-flux-to-density-temp-with-bayesian-networks/assets/111900566/2a04ef9b-0441-4a32-bbf9-fe9873b44ec1
 
-<div align="center">
-  <video src="lya-flux-flow.mp4" width="400" />
-</div>
-
-<div align="center">
-  <video src="cnn_progress.mp4" width="400" />
-</div>
 
     
 usage: main.py [-h] [--epochs EPOCHS] [--noise NOISE] [--patience_epochs PATIENCE_EPOCHS]
