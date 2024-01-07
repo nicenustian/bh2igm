@@ -16,32 +16,35 @@ def main():
     parser.add_argument("--train_fraction", default="0.8")
     parser.add_argument("--seed", default="12345")
     parser.add_argument("--redshift", default="4")
+    parser.add_argument('--load_best_model', action='store_true')
     parser.add_argument("--fwhm", default="6")
     parser.add_argument("--hubble", default="0.676")
     parser.add_argument("--omegam", default="0.305147")
     parser.add_argument("--skewer_length", default="20")
     parser.add_argument("--bins", default="1024")
-    parser.add_argument("--mean_flux", default=None)
+    parser.add_argument("--mean_flux", default=0.4255)
     parser.add_argument("--noise", default="0.02")
 
     parser.add_argument("--seed_int", default="12345")
-    parser.add_argument("--dataset_dir", default="dataset")
-    parser.add_argument("--output_dir", default="output")
+    parser.add_argument("--quantity", default="tempw")
+    parser.add_argument("--dataset_dir", default="dataset_files")
+    parser.add_argument("--output_dir", default="ml_outputs")
     
     parser.add_argument("--network", default="ResNet")
-    parser.add_argument("--batch_size", default="256")
+    parser.add_argument("--batch_size", default="128")
     parser.add_argument("--lr", default="6e-4")
     parser.add_argument('--features_per_block', action='store', 
                         default=[16, 32, 64, 128, 256, 512], 
                         type=int, nargs='*')
     
-    #[2, 3, 4, 4, 4, 4]
     parser.add_argument('--layers_per_block', action='store', 
                         default=[2, 3, 4, 4, 4, 4], 
                         type=int, nargs='*')
 
 
     args = parser.parse_args()
+
+    quantity = args.quantity
 
     patience_epochs = np.int32(args.patience_epochs)
     skewer_length = np.float32(args.skewer_length)
@@ -89,12 +92,12 @@ def main():
     dp.make_dataset()
 
     nnt = NeuralNetworkTrainer(
-         dp.get_output_dir(), "tempw", redshift, redshift, mean_flux, 
-         fwhm, bins, seed_int, True, False)
+         dp.get_output_dir(), quantity, redshift, redshift, mean_flux, 
+         fwhm, bins, seed_int, args.load_best_model)
     
     ds = dp.get_dataset()
     nnt.set_dataset(ds[0], ds[1], ds[2], ds[3], ds[4], ds[5], 
-                     noise, None, train_fraction
+                     noise, None, None, train_fraction
          )
     
     nnt.set_ml_model(network, layers_per_block, features_per_block)
