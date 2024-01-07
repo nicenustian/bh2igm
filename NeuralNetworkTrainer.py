@@ -9,9 +9,10 @@ from machine_learning_models.ResNet import ResNet
 from numpy import random
 from UtilityFunctions import UtilityFunctions
 
+
 class NeuralNetworkTrainer:
     def __init__(self, output_dir, quantity, redshift, obs_redshifts, mean_flux,
-                 fwhm, bins, seed
+                 fwhm, bins, seed, load_best_model
                  ):
         
         self.output_dir = output_dir
@@ -23,7 +24,7 @@ class NeuralNetworkTrainer:
         self.mean_flux = mean_flux
         self.seed = seed
             
-        self.load_best_model = False
+        self.load_best_model = load_best_model
         self.set_seed()
 
         
@@ -86,9 +87,8 @@ class NeuralNetworkTrainer:
         else:
             raise ValueError('Unknown Network: {}'.format(self.network))
         
-        
                 
-        print("network, layers, features, units, lr, batch_size = ", 
+        print("network, layers, features, units = ", 
                   self.network, self.layers_per_block, self.features_per_block, 
                   self. Nnodes)
 
@@ -322,6 +322,7 @@ class NeuralNetworkTrainer:
                 self.best_metric = self.current_metric
 
                 weights_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
+                print()
                 print('saving weights.. improved from', 
                       self.best_metric, 'to', self.current_metric, 
                       weights_filename)
@@ -331,7 +332,6 @@ class NeuralNetworkTrainer:
         
     
     def print_metrics(self, time_in_sec):
-        print()
         print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', 
                       ' improve_count =', self.no_improvement_count)
        
