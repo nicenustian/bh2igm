@@ -11,7 +11,10 @@ class MLP(layers.Layer):
         self.seed = seed
         activation = tfkl.PReLU(alpha_initializer=tf.initializers.constant(0.3))
 
-        self.dense = tfkl.Dense(nodes, name='dense')
+        self.dense = tfkl.Dense(nodes, 
+                                kernel_initializer=tf.keras.initializers.glorot_uniform(
+                                    seed=self.seed), bias_initializer=tf.initializers.constant(0.0),
+                                name='dense')
         self.bn = tfkl.BatchNormalization(name = 'bn')
         self.act = tfkl.Activation(activation, name = 'act')
       
