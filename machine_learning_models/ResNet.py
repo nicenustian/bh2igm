@@ -30,13 +30,21 @@ class Residual(tf.keras.Model):
 
     def __init__(self, num_channels, seed, use_1x1conv=False, strides=1, name="Residual"):
         super().__init__()
-
-        self.conv1 = tfkl.Conv1D(num_channels, 3, strides, padding='valid')
-        self.conv2 = tfkl.Conv1D(num_channels, 3, 1, padding='valid')
+        
+        self.seed = seed
+        self.conv1 = tfkl.Conv1D(num_channels, 3, strides, 
+                                 kernel_initializer=tf.keras.initializers.glorot_uniform(
+                                     seed=self.seed), bias_initializer=tf.initializers.constant(0.0),
+                                 padding='valid')
+        self.conv2 = tfkl.Conv1D(num_channels, 3, 1, padding='valid',
+                                 kernel_initializer=tf.keras.initializers.glorot_uniform(
+                                     seed=self.seed), bias_initializer=tf.initializers.constant(0.0))
         self.conv3 = None
 
         if use_1x1conv:
-            self.conv3 = tfkl.Conv1D(num_channels, 1, strides, padding='valid')
+            self.conv3 = tfkl.Conv1D(num_channels, 1, strides, padding='valid',
+                                     kernel_initializer=tf.keras.initializers.glorot_uniform(
+                                         seed=self.seed), bias_initializer=tf.initializers.constant(0.0))
 
         activation = tfkl.PReLU(alpha_initializer=tf.initializers.constant(0.3))
         self.bn1 = tfkl.BatchNormalization(name='bn1')
@@ -70,7 +78,9 @@ class Residual(tf.keras.Model):
 class ResnetBlock(keras.Model):
     def __init__(self, num_channels, num_residuals, seed, name="ResBlock", **kwargs):
         super(ResnetBlock, self).__init__(**kwargs)
+        
         self.residual_layers = []
+
 
         for i in range(num_residuals):
             if i == 0:
@@ -170,6 +180,7 @@ class ResNet(keras.Model):
         super(ResNet, self).__init__(name=name, **kwargs)
 
         self.nodes = nodes
+
         self.residual_layers = []
         for i in range(len(num_of_blocks)):
             self.residual_layers.append(ResnetBlock(num_of_channels[i],
