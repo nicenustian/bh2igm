@@ -23,9 +23,14 @@ class ConvLayer(keras.Model):
             name (str): Name of the layer.
         """
         super(ConvLayer, self).__init__(name=name, **kwargs)
+        
+        self.seed = seed
 
         activation = tfkl.PReLU(alpha_initializer=tf.initializers.constant(0.3))
-        self.conv = tfkl.Conv1D(filters, kernel, stride, padding='same')
+        self.conv = tfkl.Conv1D(filters, kernel, stride,
+                                kernel_initializer=tf.keras.initializers.glorot_uniform(
+                                    seed=self.seed), bias_initializer=tf.initializers.constant(0.0),
+                                padding='same')
         self.bn = tfkl.BatchNormalization(name='bn')
         self.act = tfkl.Activation(activation, name='act')
 
