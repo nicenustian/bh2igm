@@ -1,6 +1,5 @@
 import numpy as np
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
 import tensorflow as tf
 import time
 import keras.backend as K
@@ -29,19 +28,23 @@ class NeuralNetworkTrainer:
 
         
     def set_seed(self):
-      random.seed(self.seed)
-      np.random.seed(self.seed)
-      tf.random.set_seed(self.seed)
-      tf.experimental.numpy.random.seed(self.seed)
-      tf.random.set_seed(self.seed)
+        
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+        tf.random.set_seed(self.seed)
+        tf.experimental.numpy.random.seed(self.seed)
+        tf.keras.utils.set_random_seed(int(self.seed))
+
+
+        # When running on the CuDNN backend, two further options must be set
+        os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
+        os.environ['TF_DETERMINISTIC_OPS'] = '1'
+        # Set a fixed value for the hash seed
+        os.environ["PYTHONHASHSEED"] = str(self.seed)
+        print(f"Random seed set as {self.seed}")
+
       
-      os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
-      os.environ['TF_DETERMINISTIC_OPS'] = '1'
-      os.environ["PYTHONHASHSEED"] = str(self.seed)
-      print(f"Random seed set as {self.seed}")
-      
-      
-    def set_noise(self):        
+    def set_noise(self):
         
         utilities = UtilityFunctions()
         
@@ -130,6 +133,7 @@ class NeuralNetworkTrainer:
    
       self.flux = np.expand_dims(self.flux, axis=2)
       self.noise = np.expand_dims(self.noise, axis=2)
+
   
       self.train_data = tf.data.Dataset.from_tensor_slices((
           self.flux[:self.Ntrain], yy[:self.Ntrain], 
@@ -165,8 +169,7 @@ class NeuralNetworkTrainer:
             y_pred_upper = tf.reshape(y_pred + sigma_pred, [-1])
             y_pred_lower = tf.reshape(y_pred - sigma_pred, [-1])
             y_true = tf.reshape(y_true, [-1])
-            return tf.math.count_nonzero((y_true>=y_pred_lower) & 
-                                      (y_true<=y_pred_upper))
+            return tf.math.count_nonzero((y_true>=y_pred_lower) & (y_true<=y_pred_upper))
 
     
     @tf.function
@@ -179,6 +182,7 @@ class NeuralNetworkTrainer:
             loss_kll = tf.reduce_sum(self.ml_model.losses)/self.kll_fact
             loss = loss_nll + loss_kll
  
+    
         grads = tape.gradient(loss, self.ml_model.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.ml_model.trainable_weights))
         
@@ -192,15 +196,15 @@ class NeuralNetworkTrainer:
         self.nll_sum.update_state(loss_nll)
         self.kll_sum.update_state(loss_kll)
         self.count_sum.update_state(count)
-        
-        
+
 
     @tf.function
     def test_model(self, x_test, y_test, w_test):
         y_pred_test = self.ml_model(x_test, training=False)
         loss_nll_test = self.nll_func(tf.cast(y_test, dtype=self.type_casting), y_pred_test,
                        tf.cast(w_test, dtype=self.type_casting))/self.Ntest
-        loss_kll_test = tf.reduce_sum(self.ml_model.losses)
+            
+        loss_kll_test = tf.reduce_sum(self.ml_model.losses)       
         
         count_test = self.sigma_cover(tf.cast(y_test, dtype=self.type_casting), 
                                  y_pred_test.mean(), y_pred_test.stddev())
@@ -211,13 +215,12 @@ class NeuralNetworkTrainer:
         self.test_kll_sum.update_state(loss_kll_test)
         self.test_count_sum.update_state(count_test)
         
-        
 
     
     @tf.function
     def train_on_batches(self):
         
-        for step, (x_batch, y_batch, noise_batch, 
+        for step, (x_batch, y_batch, noise_batch,
                    w_batch) in enumerate(self.train_data):
             
             # Assuming x_batch has shape (batch_size, ...
@@ -231,7 +234,7 @@ class NeuralNetworkTrainer:
             y_batch = self.rolling(y_batch, shifts)
                         
             x_batch += ((noise_batch/np.sqrt(self.flux_var))*tf.random.normal(
-                (batch_size, self.Npixels, 1), 0, 1, tf.float64, seed=self.seed))
+                tf.shape(x_batch), 0, 1, tf.float64, seed=self.seed))
  
             self.train_model(x_batch, y_batch, w_batch)
            
@@ -242,7 +245,7 @@ class NeuralNetworkTrainer:
                    w_batch_test) in enumerate(self.test_data):
             
             # Assuming x_batch has shape (batch_size, ...
-            batch_size = tf.shape(x_batch_test)[0]  
+            batch_size = tf.shape(x_batch_test)[0]
             
             shifts = tf.random.uniform(
                 shape=(batch_size,), maxval=self.Npixels, dtype=tf.int32, 
@@ -252,7 +255,7 @@ class NeuralNetworkTrainer:
             y_batch_test = self.rolling(y_batch_test, shifts)
             
             x_batch_test += ((noise_batch_test/np.sqrt(self.flux_var))*tf.random.normal(
-                (batch_size, self.Npixels, 1), 0, 1, tf.float64, seed=self.seed))
+                tf.shape(x_batch_test), 0, 1, tf.float64, seed=self.seed))
  
             self.test_model(x_batch_test, y_batch_test, w_batch_test)
     
@@ -298,13 +301,10 @@ class NeuralNetworkTrainer:
         
         
     def update_metrics(self):
-        self.loss_nll_list.append(self.nll_sum.result().numpy()
-                                  /self.Npixels)
-        self.loss_kll_list.append(self.kll_sum.result().numpy()
-                                  /self.Npixels)
+        self.loss_nll_list.append(self.nll_sum.result().numpy()/self.Npixels)
+        self.loss_kll_list.append(self.kll_sum.result().numpy()/self.Npixels)
         self.mae_list.append(self.mae.result().numpy())
-        self.count_list.append(self.count_sum.result().numpy()
-                               /self.Ntrain/self.Nnodes)
+        self.count_list.append(self.count_sum.result().numpy()/self.Ntrain/self.Nnodes)
             
         self.test_loss_nll_list.append(self.test_nll_sum.result().numpy()
                                       /self.Npixels)
@@ -316,10 +316,12 @@ class NeuralNetworkTrainer:
         
         self.current_metric = self.test_nll_sum.result().numpy() + \
             self.test_kll_sum.result().numpy()
+            
+        print()
+        print('train/test nll = ', self.nll_sum.result().numpy(), self.test_nll_sum.result().numpy())
                 
         if self.current_metric <= self.best_metric:
                 self.no_improvement_count = 0
-                self.best_metric = self.current_metric
 
                 weights_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
                 print()
@@ -327,11 +329,16 @@ class NeuralNetworkTrainer:
                       self.best_metric, 'to', self.current_metric, 
                       weights_filename)
                 self.ml_model.save_weights(weights_filename)
+                self.best_metric = self.current_metric
+
         else:
                 self.no_improvement_count += 1
         
     
     def print_metrics(self, time_in_sec):
+        
+        print()
+        
         print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', 
                       ' improve_count =', self.no_improvement_count)
        
@@ -386,12 +393,15 @@ class NeuralNetworkTrainer:
                   
         self.train_data = self.train_data.shuffle(self.Ntrain).batch(self.batch_size)
         self.test_data = self.test_data.shuffle(self.Ntest).batch(self.batch_size)
-        
-        
         self.optimizer = tf.keras.optimizers.Adam(self.lr)
         self.ml_model.compile(optimizer=self.optimizer)
                 
         self.initialize_metrics()
+        
+        print("lr, batch size, Ntrain, Ntest", 
+              self.lr, self.batch_size, self.Ntrain, self.Ntest)
+        print()
+        
         
         while ((self.epoch < self.epochs) and
         (self.no_improvement_count < self.patience_epochs)):
@@ -400,8 +410,9 @@ class NeuralNetworkTrainer:
             self.epoch += 1
             self.train_on_batches()
             self.test_on_batches()
+            end = time.time()
             self.update_metrics()
-            self.print_metrics(time.time()-start)     
+            self.print_metrics(end-start)     
             self.reset_metrics()
             
-        # self.save_history_file()
+        self.save_history_file()
