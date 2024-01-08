@@ -83,13 +83,22 @@ class DataProcessor:
         
             file_list = os.listdir(self.dataset_dir)
             # Filter files that do not end with ".npy"
-            filtered_files = [filename for filename in file_list if filename.endswith(".npy")]
-            self.files_list = filtered_files
-
-            self.total_models = len(self.files_list)
+            filtered_files = [filename for filename in file_list 
+                              if (filename.endswith(".npy") and "weights" not in filename)]
+            self.files_list = sorted(filtered_files)
+            self.total_models = len(self.files_list)            
+            weights_files = [filename for filename in file_list if "weights" in filename]
+            
+            if weights_files == None : 
+                self.weights = np.full(self.total_models, 1.0)
+            else:
+                print("opening weights file..", self.dataset_dir+weights_files[0])
+                with open(self.dataset_dir+weights_files[0], 'rb') as f:
+                    self.weights = np.load(f)
+            
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
-    
+
         return 
         
 
@@ -108,7 +117,7 @@ class DataProcessor:
     
     
     def read_skewers(self) -> NoReturn:
-        # check if the directory exists, and if not, create it
+        # check if the directory exists, and if not, raise error
         if os.path.exists(self.dataset_dir):
             
             with open(self.dataset_dir+self.filename, 'rb') as f:
@@ -122,7 +131,7 @@ class DataProcessor:
 
     
     
-    def rescale_tau(self) -> float:
+    def rescale_tau(self, mean_flux) -> float:
         #flatten the array
         opt_flt  = self.opt.flatten()
 
@@ -132,7 +141,7 @@ class DataProcessor:
             
         #use newton rapson method to get the factor
         while diff > 1e-8:
-            num=(  np.mean( np.exp(-a_pre*opt_flt) * self.foreground_mean_flux ) - self.mean_flux  )            
+            num=(  np.mean( np.exp(-a_pre*opt_flt) * self.foreground_mean_flux ) - mean_flux  )            
             den=(  np.mean(opt_flt * np.exp(-a_pre*opt_flt)*self.foreground_mean_flux ) )          
             a_next=a_pre+num/den
             diff = np.abs(a_next - a_pre)
@@ -153,7 +162,7 @@ class DataProcessor:
         while np.abs(fdiff)>1e-4 and iteration<iterations_allowed:
             
             #STEP 1: Rescale flux
-            flux = np.exp(-self.rescale_tau()*self.opt)
+            flux = np.exp(-self.rescale_tau(self.mean_flux)*self.opt)
             
             #STEP 2: Convolve with Gaussian profile
             #sigma = 1 means it unchanged
@@ -215,11 +224,11 @@ class DataProcessor:
                           self.tempw_rebin[:, np.int32(np.round(ii*self.bins_ratio)):np.int32(
                               np.round((ii+1)*self.bins_ratio))] = np.expand_dims(self.tempw[:, ii], axis=1)
 
-            fdiff =  self.mean_flux - np.mean(self.flux_rebin)
+            current_mean_flux = np.mean(self.flux_rebin)
+            fdiff =  self.mean_flux - current_mean_flux
             iteration += 1
             self.mean_flux += fdiff
-            print('<F> =', np.round(self.mean_flux, 3),  np.round(np.mean(self.flux_rebin), 3), 
-                  ', fdiff =', fdiff, ', bins =', self.bins)
+            print('<F> =', ', fdiff =', fdiff, ', bins =', self.bins)
 
 
     def scale_dataset(self) -> NoReturn:
@@ -262,15 +271,7 @@ class DataProcessor:
     def stack_dataset(self) -> NoReturn:
         
         initialised = False
-        no_weights  = True
-        
-        #filename = dataset_dir+'model_weights_z'+"{:.2f}".format(redshift)+'.npy'
-        #print(filename)
-        #with open(filename, 'rb') as f:
-        #     model_weights = np.load(f)
-            
-        #print('model weights ', model_weights, model_weights.shape, 'weights sum = ', np.sum(model_weights))
-        
+
         for mi, filename in enumerate(self.files_list):
             
             print()
@@ -279,11 +280,6 @@ class DataProcessor:
             self.filename = filename
             self.read_skewers()
             self.process_skewers()
-            
-            if no_weights:
-                self.weights = np.full(self.flux_rebin.shape, 1.0)
-            #else:
-            #    self.weights = np.full(self.flux.shape, model_weights[mi])
 
             
             if initialised!=True:
@@ -291,12 +287,14 @@ class DataProcessor:
                 self.flux_dataset = self.flux_rebin
                 self.densityw_dataset = self.densityw_rebin
                 self.tempw_dataset = self.tempw_rebin
-                self.weights_dataset = self.weights
+                self.weights_dataset = np.full(self.flux_rebin.shape, self.weights[mi])
             else:                
                 self.flux_dataset = np.vstack( (self.flux_dataset, self.flux_rebin) )
                 self.densityw_dataset = np.vstack( (self.densityw_dataset, self.densityw_rebin) )
                 self.tempw_dataset = np.vstack( (self.tempw_dataset, self.tempw_rebin) )
-                self.weights_dataset = np.vstack( (self.weights_dataset, self.weights) )
+                self.weights_dataset = np.vstack(
+                    (self.weights_dataset, np.full(self.flux_rebin.shape, self.weights[mi]))
+                    )
 
 
     def shuffle_dataset(self) -> NoReturn:
@@ -324,7 +322,7 @@ class DataProcessor:
               np.mean(self.tempw_dataset), np.mean(self.weights_dataset))
         
         self.scale_dataset()
-        self.shuffle_dataset()            
+        self.shuffle_dataset()
 
         print('after scaling mean (flux, densityw, tempw, weights)', 
               np.mean(self.flux_dataset), np.mean(self.densityw_dataset), 
