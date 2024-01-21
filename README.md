@@ -95,11 +95,15 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
 
 # Predictions using the fields
 
-# using flux field to predict density field
-![Screenshot 2024-01-21 at 10 01 04](https://github.com/nicenustian/bh2igm/assets/111900566/a052a96f-15df-4207-bc09-87b3894e70f4)
+# using flux field to predict densityw field
+![Screenshot 2024-01-21 at 10 30 52](https://github.com/nicenustian/bh2igm/assets/111900566/9d0ea919-f582-478a-86d6-352a06391771)
+
+# using flux field to predict tempw field
+![Screenshot 2024-01-21 at 10 30 52](https://github.com/nicenustian/bh2igm/assets/111900566/75ec2c55-ff2e-4d4e-9d3f-3b4b2acd128c)
 
 # using density to predict temp field
 ![Screenshot 2024-01-21 at 10 01 45](https://github.com/nicenustian/bh2igm/assets/111900566/8ed58b74-321b-4e38-a10d-f8cc66fbf961)
 
-# using flux field to predict tempw field
+# using flux field to predict density field
+![Screenshot 2024-01-21 at 10 01 04](https://github.com/nicenustian/bh2igm/assets/111900566/a052a96f-15df-4207-bc09-87b3894e70f4)
 
