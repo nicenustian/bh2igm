@@ -37,7 +37,7 @@ module load tensorflow-probability/0.14.1
 srun python -u main.py
 ```
 
-You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using the snippet below. The code calls these fields with the same dictionary. Each data field (such as density) is given as Number of examples x Number of samples. Such as 5000 x 1024, where 5000 examples are provided each with 1024 samples. The fields can also be rebinned. The code also calculates 'flux' fields if 'opt' (optical depths are provided). To select fields for params search, training and predictions set --input_quantity and --output_quantity. For this example you can choose temp, density, tempw, densityw, flux and opt.
+You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using the snippet below. The code calls these fields with the same dictionary. Each data field (such as density) is given as Number of examples x Number of samples. Such as 5000 x 1024, where 5000 examples are provided each with 1024 samples. The fields can also be rebinned. The code also calculates 'flux' fields if 'opt' (optical depths are provided). To select fields for params search, training and predictions set --input_quantity and --output_quantity. For this example you can choose temp, density, tempw, densityw, flux and opt. When providing the files in a --dataset_dir you need to specify which files would be make the training dataset which would be only used for predictions. This can can done by adding 'model_train' and 'model_test' as a prefix to dataset file names. Read main.py arguemtns to chnage these prefixes if you need to. 
 
 # Code for writing files
 ```python
@@ -92,3 +92,13 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
                [--layers_per_block [LAYERS_PER_BLOCK ...]] [--features_per_block [FEATURES_PER_BLOCK ...]] [--bins BINS] [--mean_flux MEAN_FLUX]
                [--noise NOISE] [--fwhm FWHM] [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--seed_int SEED_INT]
 ```
+
+# Predictions using the fields
+# using density to predict temp field
+![Screenshot 2024-01-21 at 10 01 04](https://github.com/nicenustian/bh2igm/assets/111900566/a052a96f-15df-4207-bc09-87b3894e70f4)
+
+# using flux field to predict density field
+![Screenshot 2024-01-21 at 10 01 45](https://github.com/nicenustian/bh2igm/assets/111900566/8ed58b74-321b-4e38-a10d-f8cc66fbf961)
+
+# using flux field to predict tempw field
+
