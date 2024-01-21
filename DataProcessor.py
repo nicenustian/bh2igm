@@ -2,14 +2,20 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 import os
 from scipy.ndimage import convolve1d
-from typing import NoReturn, Union, Tuple, Any, Optional
+from typing import NoReturn, Tuple
+from UtilityFunctions import UtilityFunctions
+
 
 class DataProcessor:
     
     def __init__(
                  self,
         dataset_dir: str,
+        dataset_file_filter: str,
         output_dir: str,
+        input_quantity : str,
+        output_quantity : str,
+        noweights : bool,
         redshift: float,
         skewer_length: int,
         hubble: float,
@@ -22,7 +28,11 @@ class DataProcessor:
         
         
         self.dataset_dir = dataset_dir
+        self.dataset_file_filter = dataset_file_filter
         self.output_dir = output_dir
+        self.input_quantity = input_quantity
+        self.output_quantity = output_quantity
+        self.noweights = noweights
         
         self.redshift = redshift
         self.skewer_length = skewer_length
@@ -32,70 +42,54 @@ class DataProcessor:
         self.bins = bins
         self.mean_flux = mean_flux
         self.seed = seed
+        self.uf = UtilityFunctions()
         
-        self.opt = np.array([])
-        self.flux = np.array([])
-        self.flux_rebin = np.array([])
+        self.xmean = 0
+        self.xvar = 1
+        self.index = []
         
-        self.density = np.array([])
-        self.temp = np.array([])
-        self.densityw = np.array([])
-        self.tempw = np.array([])
-        
-        self.densityw_rebin = np.array([])
-        self.tempw_rebin = np.array([])
-        
-        self.flux_dataset = np.array([])
-        self.densityw_dataset = np.array([])
-        self.tempw_dataset = np.array([])
-        self.weights_dataset = np.array([])
-        
-        self.flux_scaler_mean = 1
-        self.flux_scaler_var = 1
-        
-        self.bins_ratio = 1
-        self.foreground_mean_flux = 1
-        self.filename = ''
-        self.get_files_list()
+        self.read_files_list()
         self.post_file_name()
     
 
     @property
     def vmax(self) -> float:
-        return self.skewer_length / (1 + self.redshift) / self.hubble * self.hubbleZ
+        return self.skewer_length / (1 + self.redshift) \
+            / self.hubble * self.hubbleZ
+    
     
     @property
     def hubbleZ(self) -> float:
-        return self.hubble*100.*np.sqrt(self.omegam*np.power(1.+self.redshift, 3) + (1.-self.omegam))
+        return self.hubble*100.*np.sqrt(
+            self.omegam*np.power(1.+self.redshift, 3) + (1.-self.omegam))
+
 
     def get_output_dir(self) -> str:
         return self.output_dir
     
+    
+    def get_post_file_name(self) -> str:
+        return self.post_output
+    
+    
+    def get_files_list(self) -> str:
+        return self.files_list
+    
+    
     def get_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
                                    np.ndarray, float, float]:
-        return self.flux_dataset, self.densityw_dataset, \
-    self.tempw_dataset, self.weights_dataset, self.flux_scaler_mean, \
-    self.flux_scaler_var
+        return self.xdataset, self.ydataset, self.wdataset, \
+    self.xmean, self.xvar, self.index
 
 
-    def get_files_list(self) -> NoReturn:
+    def read_files_list(self) -> NoReturn:
         if os.path.exists(self.dataset_dir):
         
             file_list = os.listdir(self.dataset_dir)
-            # Filter files that do not end with ".npy"
-            filtered_files = [filename for filename in file_list 
-                              if (filename.endswith(".npy") and "weights" not in filename)]
-            self.files_list = sorted(filtered_files)
-            self.total_models = len(self.files_list)            
-            weights_files = [filename for filename in file_list if "weights" in filename]
-            
-            if weights_files == None : 
-                self.weights = np.full(self.total_models, 1.0)
-            else:
-                print("opening weights file..", self.dataset_dir+weights_files[0])
-                with open(self.dataset_dir+weights_files[0], 'rb') as f:
-                    self.weights = np.load(f)
-            
+            filtered_files = [filename for filename in file_list
+                              if self.dataset_file_filter in filename]
+            self.files_list = sorted(filtered_files)            
+            self.total_models = len(self.files_list)
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
 
@@ -107,7 +101,7 @@ class DataProcessor:
         '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.redshift)
 
         self.output_dir = self.output_dir.replace("/", "")+self.post_output+"/"
-            
+        
         # check if the directory exists, and if not, create it
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
@@ -118,155 +112,152 @@ class DataProcessor:
     
     def read_skewers(self) -> NoReturn:
         # check if the directory exists, and if not, raise error
-        if os.path.exists(self.dataset_dir):
+        filename = self.dataset_dir+self.filename
+        
+        if os.path.exists(filename):
+            data = np.load(filename,'rb')
             
-            with open(self.dataset_dir+self.filename, 'rb') as f:
-                self.opt = np.load(f)
-                self.density = np.load(f)
-                self.temp = np.load(f)
-                self.densityw = np.load(f)
-                self.tempw = np.load(f)
+            if self.input_quantity in data:
+                
+                self.x = data[self.input_quantity]
+                
+                if self.input_quantity == 'opt':
+                    #if optical depth rescale them to match a mean flux
+                    self.x  = self.uf.rescale_opt(self.x, self.mean_flux)*self.x
+                    
+                # rebin data to pixels specified
+                self.x = self.rebin(self.x)
+                    
+            elif self.input_quantity == "flux" and "opt" in data:
+                # this function returns flux
+                self.x = self.process_opt(data["opt"])
+            else:    
+                print('The input', self.input_quantity ,'does not exist')
+
+
+            if self.output_quantity in data:
+                
+                self.y = data[self.output_quantity]
+                
+                if self.output_quantity == 'opt':
+                    self.y  = self.uf.rescale_opt(self.y, self.mean_flux)*self.y
+                    
+                # rebin data to pixels specified
+                self.y = self.rebin(self.y)
+                    
+            elif self.output_quantity == "flux" and "opt" in data:
+                # this function returns flux
+                self.y = self.process_opt(data["opt"])
+            else:    
+                print('The input', self.output_quantity ,'does not exist')
+
+            
+            if 'weights' in data and not self.noweights:
+                self.w = self.rebin(data["weights"])
+            else:
+                self.w = np.ones(self.x.shape)
+                
+            print('input', self.input_quantity, self.x.shape, np.mean(self.x))
+            print('output', self.output_quantity, self.y.shape, np.mean(self.y))
+            print("weights", self.w.shape, np.mean(self.w))
+                  
         else:
-            raise ValueError('directory: {self.dataset_dir} doest not exist' )
+            raise ValueError('file: {filename} doest not exist' )
 
-    
-    
-    def rescale_tau(self, mean_flux) -> float:
-        #flatten the array
-        opt_flt  = self.opt.flatten()
 
-        #initialise with small value, so that the exp is a reasonable value
-        a_pre = np.mean(np.exp(-self.opt))
-        diff = 1
+    def rebin(self, data):
+        
+        bins_old = data.shape[1]
+        
+        bins_ratio = (bins_old/self.bins) if bins_old>self.bins else (self.bins/bins_old)
+        
+        if bins_old>self.bins:
+            data_rebin = self.uf.downsample(data, self.bins, bins_ratio)
+        elif bins_old<self.bins:
+            data_rebin = self.uf.upsample(data, self.bins, bins_ratio)
+        
+        return data_rebin
+      
+
+    def convolve(self, data):
+        
+        bins_old = data.shape[1]
+        num_of_los = data.shape[0]
+
+        fwhmrel = self.fwhm * bins_old/self.vmax
+        sigma = fwhmrel/(2*np.sqrt(2*np.log(2)))
+
+        #roughly 50 pixels have non-zero values in kernel
+        kernel_bins = 50 #flux.shape[1]
+        kernel_bins_half = np.int32(kernel_bins/2)
+
+        xx = np.arange(kernel_bins) - kernel_bins_half 
+        kernel = 1/(sigma*np.sqrt(2*np.pi))  * np.exp(-0.5 * (xx/sigma)*(xx/sigma))            
+        data_conv = np.zeros(data.shape)
             
-        #use newton rapson method to get the factor
-        while diff > 1e-8:
-            num=(  np.mean( np.exp(-a_pre*opt_flt) * self.foreground_mean_flux ) - mean_flux  )            
-            den=(  np.mean(opt_flt * np.exp(-a_pre*opt_flt)*self.foreground_mean_flux ) )          
-            a_next=a_pre+num/den
-            diff = np.abs(a_next - a_pre)
-            a_pre=a_next
-              
-        return a_pre
+        for ilos in range(num_of_los):
+            data_conv[ilos,:] = convolve1d(data[ilos,:], kernel, mode='wrap')
+
+        return data_conv
 
 
-    def process_skewers(self) -> NoReturn:
+    def process_opt(self, opt):
         
         iteration = 0
         fdiff = 1
         iterations_allowed = 1
-        
-        bins_old = self.opt.shape[1]
-        num_of_los = self.opt.shape[0]
 
         while np.abs(fdiff)>1e-4 and iteration<iterations_allowed:
             
             #STEP 1: Rescale flux
-            flux = np.exp(-self.rescale_tau(self.mean_flux)*self.opt)
+            flux = np.exp(-self.uf.rescale_opt(opt, self.mean_flux)*opt)
             
             #STEP 2: Convolve with Gaussian profile
             #sigma = 1 means it unchanged
-            FWHMrel = self.fwhm * bins_old/self.vmax
-            sigma = FWHMrel/(2*np.sqrt(2*np.log(2)))
-
-            #roughly 50 pixels have non-zero values in kernel
-            kernel_bins = 50 #flux.shape[1]
-            kernel_bins_half = np.int32(kernel_bins/2)
-
-            xx = np.arange(kernel_bins) - kernel_bins_half 
-            kernel = 1/(sigma*np.sqrt(2*np.pi))  * np.exp(-0.5 * (xx/sigma)*(xx/sigma))            
-            flux_conv = np.zeros(flux.shape)
-            
-            for ilos in range(num_of_los):
-                flux_conv[ilos,:] = convolve1d(flux[ilos,:], kernel, mode='wrap')
+            flux_conv = self.convolve(flux)
 
             #STEP 3: Rebin onto pixels
-            #######################################################################
-            #sets the pixel size to sigma (based on FWHM)
-            #of width sigma = FWHM/[2*(2*ln2)^1/2] 
+            #pixel size to sigma (based on FWHM) width sigma = FWHM/[2*(2*ln2)^1/2]  
+            flux_rebin = self.rebin(flux_conv)
 
-            self.flux_rebin = np.zeros((num_of_los, self.bins))
-            self.bins_ratio = (bins_old/self.bins) if bins_old>self.bins else (self.bins/bins_old)
-               
-            if bins_old>self.bins:
-                 #down sampling
-                 for ii in range(self.bins):
-                         self.flux_rebin[:, ii] = np.mean(
-                                 flux_conv[:, np.int32(
-                                     (ii*self.bins_ratio)):np.int32(((ii+1)*self.bins_ratio))], axis=1)
-         
-            else:
-                #upsampling
-                for ii in range(bins_old):
-                    self.flux_rebin[:, np.int32(
-                        (ii*self.bins_ratio)):np.int32(((ii+1)*self.bins_ratio))] = \
-                    np.expand_dims(flux_conv[:, ii], axis=1)
-
-
-            if iteration==0:
-                  self.tempw_rebin = np.zeros((num_of_los, self.bins))
-                  self.densityw_rebin = np.zeros((num_of_los, self.bins))
-                
-                  if bins_old>self.bins:
-                      for ii in range(self.bins):
-                              self.tempw_rebin[:, ii] = np.mean(
-                                  self.tempw[:, np.int32((ii*self.bins_ratio)):np.int32(
-                                      ((ii+1)*self.bins_ratio))], axis=1)
-                         
-                              self.densityw_rebin[:, ii] = np.mean(
-                                  self.densityw[:, np.int32((ii*self.bins_ratio)):np.int32(
-                                      ((ii+1)*self.bins_ratio))], axis=1)
-                             
-                  else:
-                      for ii in range(bins_old):
-                          self.densityw_rebin[:, np.int32(np.round(ii*self.bins_ratio)):np.int32(
-                              np.round((ii+1)*self.bins_ratio))] = np.expand_dims(self.densityw[:, ii], axis=1)
-                          self.tempw_rebin[:, np.int32(np.round(ii*self.bins_ratio)):np.int32(
-                              np.round((ii+1)*self.bins_ratio))] = np.expand_dims(self.tempw[:, ii], axis=1)
-
-            current_mean_flux = np.mean(self.flux_rebin)
+            current_mean_flux = np.mean(flux_rebin)
             fdiff =  self.mean_flux - current_mean_flux
             iteration += 1
             self.mean_flux += fdiff
-            print('<F> =', ', fdiff =', fdiff, ', bins =', self.bins)
+            print('<F> difference =', fdiff, ', bins =', self.bins)
+        return flux_rebin
+
 
 
     def scale_dataset(self) -> NoReturn:
                 
-        flux_scaler = StandardScaler()
-        densityw_scaler = StandardScaler()
-        tempw_scaler = StandardScaler()
+        xscaler = StandardScaler()
+        yscaler = StandardScaler()
         
         #normalize the dataset
-        flux_scaler.fit(self.flux_dataset.reshape(-1, 1))
-        densityw_scaler.fit(self.densityw_dataset.reshape(-1, 1))
-        tempw_scaler.fit(self.tempw_dataset.reshape(-1, 1))
+        xscaler.fit(self.xdataset.reshape(-1, 1))
+        yscaler.fit(self.ydataset.reshape(-1, 1))
     
-        print('scalers=', flux_scaler.mean_, flux_scaler.var_, 
-              densityw_scaler.mean_, densityw_scaler.var_,
-              tempw_scaler.mean_, tempw_scaler.var_)
+        print()
+        print('scalers..')
+        print(self.input_quantity, xscaler.mean_, xscaler.var_)
+        print(self.output_quantity, yscaler.mean_, yscaler.var_)
         
+        self.xdataset = xscaler.transform(
+            self.xdataset.reshape(-1,1)).reshape(self.xdataset.shape)
+        self.ydataset = yscaler.transform(
+            self.ydataset.reshape(-1,1)).reshape(self.ydataset.shape)
         
-        self.flux_dataset = flux_scaler.transform(
-            self.flux_dataset.reshape(-1,1)).reshape(self.flux_dataset.shape)
-        self.densityw_dataset = densityw_scaler.transform(
-            self.densityw_dataset.reshape(-1,1)).reshape(self.densityw_dataset.shape)
-        self.tempw_dataset = tempw_scaler.transform(
-            self.tempw_dataset.reshape(-1,1)).reshape(self.tempw_dataset.shape)
-        
-        self.flux_scaler_mean = flux_scaler.mean_
-        self.flux_scaler_var = flux_scaler.var_
-        
+        self.xmean = xscaler.mean_
+        self.xvar = xscaler.var_
                 
-        save_file = self.output_dir+'scaler'+self.post_output
+        save_file = self.output_dir+'scaler_'+self.input_quantity+'_'+self.output_quantity
         with open(save_file, 'wb') as f:
-            np.save(f, flux_scaler.mean_)
-            np.save(f, flux_scaler.var_)
-            np.save(f, densityw_scaler.mean_)
-            np.save(f, densityw_scaler.var_)
-            np.save(f, tempw_scaler.mean_)
-            np.save(f, tempw_scaler.var_)
-
+            np.save(f, xscaler.mean_)
+            np.save(f, xscaler.var_)
+            np.save(f, yscaler.mean_)
+            np.save(f, yscaler.var_)
+      
 
     def stack_dataset(self) -> NoReturn:
         
@@ -279,54 +270,49 @@ class DataProcessor:
             
             self.filename = filename
             self.read_skewers()
-            self.process_skewers()
-
-            
+                
             if initialised!=True:
                 initialised = True
-                self.flux_dataset = self.flux_rebin
-                self.densityw_dataset = self.densityw_rebin
-                self.tempw_dataset = self.tempw_rebin
-                self.weights_dataset = np.full(self.flux_rebin.shape, self.weights[mi])
-            else:                
-                self.flux_dataset = np.vstack( (self.flux_dataset, self.flux_rebin) )
-                self.densityw_dataset = np.vstack( (self.densityw_dataset, self.densityw_rebin) )
-                self.tempw_dataset = np.vstack( (self.tempw_dataset, self.tempw_rebin) )
-                self.weights_dataset = np.vstack(
-                    (self.weights_dataset, np.full(self.flux_rebin.shape, self.weights[mi]))
-                    )
+                self.xdataset = self.x
+                self.ydataset = self.y
+                self.wdataset = self.w
+            else:
+                self.xdataset = np.vstack( (self.xdataset, self.x) )
+                self.ydataset = np.vstack( (self.ydataset, self.y) )
+                self.wdataset = np.vstack( (self.wdataset, self.w) )
+
+            self.index = np.arange(self.xdataset.shape[0])
 
 
     def shuffle_dataset(self) -> NoReturn:
-        sightline_per_model = np.int32(self.flux_dataset.shape[0] / self.total_models )
-        index = np.zeros(self.flux_dataset.shape[0])
+        
+        sightline_per_model = np.int32(self.xdataset.shape[0] / self.total_models )
+        index = np.zeros(self.xdataset.shape[0])
+        
         for i in range(len(index)):
             index[i] = (i%self.total_models) * sightline_per_model + \
             np.int32(i/self.total_models)
             
-                
-        index = index.astype('int32')
-        self.flux_dataset = self.flux_dataset[index]
-        self.densityw_dataset = self.densityw_dataset[index]
-        self.tempw_dataset = self.tempw_dataset[index]
-        self.weights_dataset = self.weights_dataset[index]
+        self.index = index.astype('int32')
+        self.xdataset = self.xdataset[self.index]
+        self.ydataset = self.ydataset[self.index]
+        self.wdataset = self.wdataset[self.index]
 
 
-    def make_dataset(self) -> NoReturn:
+    def make_dataset(self, scale_and_shuffle) -> NoReturn:
  
         self.stack_dataset()
         print()
         
-        print('before scaling mean (flux, densityw, tempw, weights) ', 
-              np.mean(self.flux_dataset), np.mean(self.densityw_dataset),
-              np.mean(self.tempw_dataset), np.mean(self.weights_dataset))
+        print(self.input_quantity, self.output_quantity, 'before scaling mean ', 
+              np.mean(self.xdataset), np.mean(self.ydataset), np.mean(self.wdataset))
         
-        self.scale_dataset()
-        self.shuffle_dataset()
-
-        print('after scaling mean (flux, densityw, tempw, weights)', 
-              np.mean(self.flux_dataset), np.mean(self.densityw_dataset), 
-              np.mean(self.tempw_dataset))
-        print('datasets shapes ', self.flux_dataset.shape, 
-              self.densityw_dataset.shape, 
-              self.tempw_dataset.shape, self.weights_dataset.shape)
+        if scale_and_shuffle:
+            self.scale_dataset()
+            self.shuffle_dataset()
+            
+        print(self.input_quantity, self.output_quantity, 'weights', 'after scaling mean ', 
+                  np.mean(self.xdataset), np.mean(self.ydataset), np.mean(self.wdataset))
+            
+        print(self.input_quantity, self.output_quantity, 'weights', 'shapes', 
+                  self.xdataset.shape, self.ydataset.shape, self.wdataset.shape)

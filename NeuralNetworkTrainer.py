@@ -2,30 +2,36 @@ import numpy as np
 import os
 import tensorflow as tf
 import time
+import matplotlib
+import matplotlib.pyplot as plt
+font = {'family' : 'serif', 'weight' : 'normal','size' : 34}
+matplotlib.rc('font', **font)
 import keras.backend as K
 from machine_learning_models.ConvNet import ConvNet
 from machine_learning_models.ResNet import ResNet
+from machine_learning_models.MLPNet import MLPNet
 from numpy import random
 from UtilityFunctions import UtilityFunctions
 
 
 class NeuralNetworkTrainer:
-    def __init__(self, output_dir, quantity, redshift, obs_redshifts, mean_flux,
-                 fwhm, bins, seed, load_best_model
-                 ):
+    def __init__(self, output_dir, network, seed, load_best_model,
+                 input_quantity, output_quantity):
         
         self.output_dir = output_dir
-        self.quantity = quantity
-        self.redshift = redshift
-        self.obs_redshifts = obs_redshifts
-        self.fwhm = fwhm
-        self.bins = bins
-        self.mean_flux = mean_flux
         self.seed = seed
-            
         self.load_best_model = load_best_model
-        self.set_seed()
+        self.input_quantity = input_quantity
+        self.output_quantity = output_quantity
+        self.network = network
 
+
+        self.set_seed()
+        self.strategy = tf.distribute.MirroredStrategy()
+        print('Number of devices: {}'.format(
+            self.strategy.num_replicas_in_sync)
+            )
+        
         
     def set_seed(self):
         
@@ -33,8 +39,6 @@ class NeuralNetworkTrainer:
         np.random.seed(self.seed)
         tf.random.set_seed(self.seed)
         tf.experimental.numpy.random.seed(self.seed)
-        tf.keras.utils.set_random_seed(int(self.seed))
-
 
         # When running on the CuDNN backend, two further options must be set
         os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
@@ -46,102 +50,115 @@ class NeuralNetworkTrainer:
       
     def set_noise(self):
         
-        utilities = UtilityFunctions()
+        #utilities = UtilityFunctions()
         
-        print('noisey noise', self.noise_model)
+        print('noise', self.noise_model)
     
         if isinstance(self.noise_model, np.float32):
             self.snr = 1/self.noise_model
-            print('fixed snr=', self.snr)
-            self.noise = np.full(self.flux.shape, self.noise_model, dtype=np.float64)
+            print('fixed snr=', np.int32(self.snr))
+            self.noise = np.full(self.x.shape, self.noise_model, dtype=np.float64)
         else:
             self.snr = np.int32(np.mean(1.0/self.noise_model[self.noise_model>0]))
-            self.noise = np.zeros(self.flux.shape, dtype=np.float64)
+            self.noise = np.zeros(self.x.shape, dtype=np.float64)
             
-            #normalised the flux bins
-            self.flux_bins = (self.flux_bins - self.flux_mean)/self.flux_var
-            for i in range(self.Ntotal):
-                #get the corresponding noise for each flux pixel
-                self.noise[i] = self.noise_model[utilities.closest_argmin(self.flux[i], self.flux_bins)]
-                #adjust the flux pixels to one, si they become featureless regions
-                self.flux[i][self.bad==1] = 1.0
-                #noise to zero in bad pixels regions
-                self.noise[i][self.bad==1] = 0.0
+            # #normalised the flux bins
+            # self.flux_bins = (self.flux_bins - self.flux_mean)/self.flux_var
+            # for i in range(self.Ntotal):
+            #     #get the corresponding noise for each flux pixel
+            #     self.noise[i] = self.noise_model[utilities.closest_argmin(self.flux[i], self.flux_bins)]
+            #     #adjust the flux pixels to one, si they become featureless regions
+            #     self.flux[i][self.bad==1] = 1.0
+            #     #noise to zero in bad pixels regions
+            #     self.noise[i][self.bad==1] = 0.0
   
     
-    def set_ml_model(self, network, layers_per_block, features_per_block): 
+    def set_ml_model(self, layers_per_block, features_per_block): 
         
-        self.network = network
         self.layers_per_block = layers_per_block
         self.features_per_block = features_per_block
         
             
         if 'ResNet' == self.network:
-            
-            self.ml_model  = ResNet(self.layers_per_block, 
-                                    self.features_per_block, 
-                                    self. Nnodes, self.seed)
+            with self.strategy.scope():
+                self.ml_model  = ResNet(self.layers_per_block, 
+                                        self.features_per_block, 
+                                        self. Nnodes, self.seed)
 
         elif  'ConvNet' == self.network:
-            self.ml_model  = ConvNet(self.layers_per_block, 
-                                     self.features_per_block, 
-                                     self.Nnodes, self.seed)
+            with self.strategy.scope():
+                self.ml_model  = ConvNet(self.layers_per_block, 
+                                         self.features_per_block,
+                                         self.Nnodes, self.seed)
+                
+        elif  'MLPNet' == self.network:
+            with self.strategy.scope():
+                self.ml_model  = MLPNet(self.layers_per_block,
+                                        self.Nnodes, self.seed)
 
         else:
             raise ValueError('Unknown Network: {}'.format(self.network))
         
-                
-        print("network, layers, features, units = ", 
+        if self.network == 'MLPNet':
+            print("network, layers, units = ", 
+                      self.network, np.sum(self.layers_per_block), 
+                      self. Nnodes)
+        else:    
+            print("network, layers, features, units = ", 
                   self.network, self.layers_per_block, self.features_per_block, 
                   self. Nnodes)
+        
+        if self.load_best_model==True:
+            ml_model_filename = self.output_dir+'nnweights_'+\
+                self.input_quantity+"_"+self.output_quantity+'/'
+            print('loading model ', ml_model_filename)
+            self.ml_model.load_weights(ml_model_filename).expect_partial() 
 
 
-    def set_dataset(self, flux, densityw, tempw, weights, flux_mean, flux_var, 
-                    noise_model, flux_bins, bad, train_fraction
-                  ):
+
+    def set_dataset(self, ds, files_list, post_output, noise_model, 
+                    flux_bins, bad, train_fraction):
       
-      self.flux = flux
-      self.densityw = densityw
-      self.tempw = tempw
-      self.weights = weights
+      self.x = ds[0]
+      self.y = ds[1]
+      self.w = ds[2]
+      self.xscalar_mean = ds[3]
+      self.xscalar_var = ds[4]
+      self.index = ds[5]
+      self.files_list = files_list
   
       self.noise_model = noise_model
       self.flux_bins = flux_bins
       self.bad = bad
-      
-      self.flux_mean = flux_mean
-      self.flux_var = flux_var
       self.train_fraction = train_fraction
       
-      self.Npixels = self.flux.shape[1]
-      self.Ntotal = self.flux.shape[0]
+      self.Npixels = self.x.shape[1]
+      self.Ntotal = self.x.shape[0]
       self.Nnodes = self.Npixels
       self.Ntrain = np.int32(self.Ntotal*self.train_fraction)
       self.Ntest = self.Ntotal - self.Ntrain
-      
       self.set_noise()
-      self.post_output = '_snr'+str(np.int32(self.snr))+'_mflux'+"{:.4f}".format(self.mean_flux)+\
-      '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.obs_redshifts)
-
       
-      if self.quantity=='densityw':
-          yy = self.densityw
-      elif self.quantity=='tempw':
-          yy = self.tempw
-      else:
-          raise ValueError('Unknown quantity: {}'.format(self.quantity))       
+      self.post_output = post_output
    
-      self.flux = np.expand_dims(self.flux, axis=2)
-      self.noise = np.expand_dims(self.noise, axis=2)
-
+      if self.network != "MLPNet":
+          self.x = np.expand_dims(self.x, axis=2)    
+          self.noise = np.expand_dims(self.noise, axis=2)
   
       self.train_data = tf.data.Dataset.from_tensor_slices((
-          self.flux[:self.Ntrain], yy[:self.Ntrain], 
-          self.noise[:self.Ntrain],  self.weights[:self.Ntrain]))
+          self.x[:self.Ntrain], self.y[:self.Ntrain], 
+          self.noise[:self.Ntrain],  self.w[:self.Ntrain]))
+      
       self.test_data = tf.data.Dataset.from_tensor_slices((
-          self.flux[self.Ntrain:], yy[self.Ntrain:], 
-          self.noise[self.Ntrain:],  self.weights[self.Ntrain:]))
-
+          self.x[self.Ntrain:], self.y[self.Ntrain:], 
+          self.noise[self.Ntrain:],  self.w[self.Ntrain:]))
+      
+      
+      options = tf.data.Options()
+      options.experimental_distribute.auto_shard_policy = \
+          tf.data.experimental.AutoShardPolicy.FILE
+      self.train_data = self.train_data.with_options(options) 
+      self.test_data = self.test_data.with_options(options)
 
         
     @tf.function
@@ -169,15 +186,35 @@ class NeuralNetworkTrainer:
             y_pred_upper = tf.reshape(y_pred + sigma_pred, [-1])
             y_pred_lower = tf.reshape(y_pred - sigma_pred, [-1])
             y_true = tf.reshape(y_true, [-1])
-            return tf.math.count_nonzero((y_true>=y_pred_lower) & (y_true<=y_pred_upper))
+            return tf.math.count_nonzero((y_true>=y_pred_lower) &\
+                                         (y_true<=y_pred_upper))
 
+
+    # Function to apply learning rate decay
+    def apply_learning_rate_decay(self):
+        self.lr *= 0.5
+        self.no_improvement_count = 0
+        self.optimizer.learning_rate.assign(self.lr)
     
-    @tf.function
-    def train_model(self, x, y, w):
+
+    #@tf.function
+    def train_model(self, x, y, n, w):
+            
+        shifts = tf.random.uniform(
+                shape=(tf.shape(x)[0],), maxval=self.Npixels, 
+                dtype=tf.int32, seed=self.seed)
+            
+        x = self.rolling(x, shifts)
+        y = self.rolling(y, shifts)
+        
+        if self.input_quantity=="flux":
+            x += ((n/np.sqrt(self.xscalar_var))*tf.random.normal(
+                tf.shape(x), 0, 1, tf.float64, seed=self.seed))
+        
         with tf.GradientTape() as tape:
             y_pred = self.ml_model(x, training=True)
             loss_nll = self.nll_func(tf.cast(y, dtype=self.type_casting), y_pred, 
-                           tf.cast(w, dtype=self.type_casting))/self.Ntrain
+                            tf.cast(w, dtype=self.type_casting))/self.Ntrain
             
             loss_kll = tf.reduce_sum(self.ml_model.losses)/self.kll_fact
             loss = loss_nll + loss_kll
@@ -199,65 +236,66 @@ class NeuralNetworkTrainer:
 
 
     @tf.function
-    def test_model(self, x_test, y_test, w_test):
-        y_pred_test = self.ml_model(x_test, training=False)
-        loss_nll_test = self.nll_func(tf.cast(y_test, dtype=self.type_casting), y_pred_test,
-                       tf.cast(w_test, dtype=self.type_casting))/self.Ntest
+    def distributed_train_model(self, x, y, n, w):
+      self.strategy.run(self.train_model, args=(x, y, n, w))
+
+
+
+    ##@tf.function
+    def train_on_batches(self):
+
+        for step, (x_batch, y_batch, noise_batch,
+                    w_batch) in enumerate(self.train_data):
+
+            self.distributed_train_model(x_batch, y_batch, noise_batch, w_batch)
+
+        if self.no_improvement_count == 10:
+            self.apply_learning_rate_decay()
+
+
+    ## @tf.function
+    def test_model(self, x, y, n, w):
             
-        loss_kll_test = tf.reduce_sum(self.ml_model.losses)       
+        shifts = tf.random.uniform(
+                shape=(tf.shape(x)[0],), maxval=self.Npixels, dtype=tf.int32, 
+                seed=self.seed
+                )
+            
+        x = self.rolling(x, shifts)
+        y = self.rolling(y, shifts)
+                        
+        if self.input_quantity=="flux":
+            x += ((n/np.sqrt(self.xscalar_var))*tf.random.normal(
+                tf.shape(x), 0, 1, tf.float64, seed=self.seed))
         
-        count_test = self.sigma_cover(tf.cast(y_test, dtype=self.type_casting), 
+        y_pred_test = self.ml_model(x, training=False)
+        loss_nll_test = self.nll_func(tf.cast(y, dtype=self.type_casting), y_pred_test,
+                       tf.cast(w, dtype=self.type_casting))/self.Ntest
+            
+        loss_kll_test = tf.reduce_sum(self.ml_model.losses)     
+        
+        count_test = self.sigma_cover(tf.cast(y, dtype=self.type_casting), 
                                  y_pred_test.mean(), y_pred_test.stddev())
         self.test_mae.update_state(
-            self.mae_func(tf.cast(y_test, dtype=self.type_casting), y_pred_test.mean())
+            self.mae_func(tf.cast(y, dtype=self.type_casting), y_pred_test.mean())
             )
         self.test_nll_sum.update_state(loss_nll_test)
         self.test_kll_sum.update_state(loss_kll_test)
         self.test_count_sum.update_state(count_test)
-        
 
+  
     
     @tf.function
-    def train_on_batches(self):
-        
-        for step, (x_batch, y_batch, noise_batch,
-                   w_batch) in enumerate(self.train_data):
-            
-            # Assuming x_batch has shape (batch_size, ...
-            batch_size = tf.shape(x_batch)[0] 
-            
-            shifts = tf.random.uniform(
-                shape=(batch_size,), maxval=self.Npixels, 
-                dtype=tf.int32, seed=self.seed)
-            
-            x_batch = self.rolling(x_batch, shifts)
-            y_batch = self.rolling(y_batch, shifts)
-                        
-            x_batch += ((noise_batch/np.sqrt(self.flux_var))*tf.random.normal(
-                tf.shape(x_batch), 0, 1, tf.float64, seed=self.seed))
- 
-            self.train_model(x_batch, y_batch, w_batch)
-           
-            
-    @tf.function
+    def distributed_test_model(self, x, y, n, w):
+      self.strategy.run(self.test_model, args=(x, y, n, w))
+
+                
+    # @tf.function
     def test_on_batches(self):
-        for step, (x_batch_test, y_batch_test, noise_batch_test, 
-                   w_batch_test) in enumerate(self.test_data):
-            
-            # Assuming x_batch has shape (batch_size, ...
-            batch_size = tf.shape(x_batch_test)[0]
-            
-            shifts = tf.random.uniform(
-                shape=(batch_size,), maxval=self.Npixels, dtype=tf.int32, 
-                seed=self.seed)
-            
-            x_batch_test = self.rolling(x_batch_test, shifts)
-            y_batch_test = self.rolling(y_batch_test, shifts)
-            
-            x_batch_test += ((noise_batch_test/np.sqrt(self.flux_var))*tf.random.normal(
-                tf.shape(x_batch_test), 0, 1, tf.float64, seed=self.seed))
- 
-            self.test_model(x_batch_test, y_batch_test, w_batch_test)
+        for step, (x,y,n,w) in enumerate(self.test_data):
+            self.distributed_test_model(x,y,n,w)
+
+
     
     def initialize_metrics(self):
         
@@ -316,19 +354,21 @@ class NeuralNetworkTrainer:
         
         self.current_metric = self.test_nll_sum.result().numpy() + \
             self.test_kll_sum.result().numpy()
+
             
-        print()
-        print('train/test nll = ', self.nll_sum.result().numpy(), self.test_nll_sum.result().numpy())
-                
         if self.current_metric <= self.best_metric:
                 self.no_improvement_count = 0
-
-                weights_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
+                
+                weights_filename = self.output_dir+'nnweights_'\
+                    +self.input_quantity+"_"+self.output_quantity+'/'
                 print()
-                print('saving weights.. improved from', 
-                      self.best_metric, 'to', self.current_metric, 
-                      weights_filename)
-                self.ml_model.save_weights(weights_filename)
+                
+                if self.save_weights==True:
+                    print('saving weights.. improved from', 
+                          self.best_metric, 'to', self.current_metric, 
+                          weights_filename)
+                    self.ml_model.save_weights(weights_filename)
+                    
                 self.best_metric = self.current_metric
 
         else:
@@ -339,7 +379,7 @@ class NeuralNetworkTrainer:
         
         print()
         
-        print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', 
+        print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', ' lr=', self.lr,  
                       ' improve_count =', self.no_improvement_count)
        
         if len(self.loss_nll_list)>0:
@@ -359,9 +399,12 @@ class NeuralNetworkTrainer:
                       print("kll = {:f}".format(self.test_loss_kll_list[-1]))
         
         
+        
     def save_history_file(self):
         #convert to numpy arrays and save the loss values
-        history_filename = self.output_dir+'history_'+self.quantity+self.post_output+'.npy'
+        history_filename = self.output_dir+'history_'+self.input_quantity+\
+            "_"+self.output_quantity+'.npy'
+            
         print('saving ', history_filename)
         with open(history_filename, 'wb') as f:
             #the train metrics
@@ -374,34 +417,48 @@ class NeuralNetworkTrainer:
             np.save(f, np.array(self.test_loss_kll_list, dtype=np.float32))
             np.save(f, np.array(self.test_mae_list, dtype=np.float32))
             np.save(f, np.array(self.test_count_list, dtype=np.float32))
+    
 
 
-    def train(self, epochs, patience_epochs, batch_size, lr):
-        
-        if self.load_best_model==True:
-            ml_model_filename = self.output_dir+'nnweights_'+self.quantity+self.post_output+'/'
-            print('loading model ', ml_model_filename)
-            self.ml_model.load_weights(ml_model_filename).expect_partial()   
+    def train(self, save_weights, epochs, patience_epochs, 
+              batch_size, lr):  
 
+        self.save_weights = save_weights
         self.epoch = 0
         self.no_improvement_count = 0
         self.patience_epochs = patience_epochs
         self.batch_size = batch_size
-        self.lr  = lr
+        self.lr = lr
         self.epochs = epochs
         self.kll_fact = 1
-                  
-        self.train_data = self.train_data.shuffle(self.Ntrain).batch(self.batch_size)
-        self.test_data = self.test_data.shuffle(self.Ntest).batch(self.batch_size)
-        self.optimizer = tf.keras.optimizers.Adam(self.lr)
-        self.ml_model.compile(optimizer=self.optimizer)
+
+            
+        self.train_data = self.strategy.experimental_distribute_dataset(
+             self.train_data
+             #.map(self.train_data)
+             .shuffle(self.Ntrain)
+             .batch(self.batch_size, drop_remainder=True)
+             .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+             )
+        
+        self.test_data = self.strategy.experimental_distribute_dataset(
+            self.test_data
+            #.map(self.test_data)
+            .shuffle(self.Ntest)
+            .batch(self.batch_size, drop_remainder=True)
+            .prefetch(buffer_size=tf.data.experimental.AUTOTUNE))
+  
+        
+        with self.strategy.scope():
+            self.optimizer = tf.keras.optimizers.Adam(self.lr)
+            self.ml_model.compile(optimizer=self.optimizer)
                 
         self.initialize_metrics()
         
         print("lr, batch size, Ntrain, Ntest", 
               self.lr, self.batch_size, self.Ntrain, self.Ntest)
         print()
-        
+
         
         while ((self.epoch < self.epochs) and
         (self.no_improvement_count < self.patience_epochs)):
@@ -412,7 +469,117 @@ class NeuralNetworkTrainer:
             self.test_on_batches()
             end = time.time()
             self.update_metrics()
-            self.print_metrics(end-start)     
+            self.print_metrics(end-start)
             self.reset_metrics()
+        
+        if self.save_weights==True:
+            self.save_history_file()
+        
+        # Return best metric value
+        return np.min(self.test_loss_nll_list)
+    
+    
+    def read_scalars_file(self):
+        
+        save_file = self.output_dir+'scaler_'+self.input_quantity+'_'+self.output_quantity
+        with open(save_file, 'rb') as f:
+            self.xscalar_mean = np.load(f)
+            self.xscalar_var = np.load(f)
+            self.yscalar_mean = np.load(f)
+            self.yscalar_var = np.load(f)
+   
+    def normalize(self, data, mean, var):
+            return (data - mean) / np.sqrt(var)
+    
+    def denormalize(self, data, mean, var):
+        return (data * np.sqrt(var)) + mean
+    
+    
+    def predict(self, dpp):
+                
+        self.read_scalars_file()
+        if self.input_quantity == "flux":
+            self.x += self.noise*np.random.normal(0, 1, np.shape(self.x))
+           
+        sightline_per_model = np.int32(self.x.shape[0] / len(self.files_list))
+        
+        print('x.shape..', self.x.shape)
+        print('scalars..', self.xscalar_mean, self.xscalar_var, 
+              self.yscalar_mean, self.yscalar_var)
+        
+        for mi, file in enumerate(self.files_list):
+            print()
+            x = self.x[mi*sightline_per_model:(mi+1)*sightline_per_model]
+            y = self.y[mi*sightline_per_model:(mi+1)*sightline_per_model]
             
-        self.save_history_file()
+            dist = self.ml_model(tf.convert_to_tensor(
+                self.normalize(x, self.xscalar_mean, self.xscalar_var)), 
+                training=False)
+            
+            mean = dist.mean()
+            std = dist.stddev()
+
+            upper_1sigma = mean + std
+            lower_1sigma = mean - std
+
+            x = np.squeeze(x)
+                
+            mean = self.denormalize(mean, self.yscalar_mean, self.yscalar_var)
+            upper_1sigma = self.denormalize(upper_1sigma, self.yscalar_mean, self.yscalar_var)
+            lower_1sigma = self.denormalize(lower_1sigma, self.yscalar_mean, self.yscalar_var)
+            
+            
+            print(self.output_quantity,'mean predictions', np.mean(mean), 
+                  np.mean(upper_1sigma), np.mean(lower_1sigma))            
+            print(mean.shape, std.shape)
+                
+            sightlines_to_plot = 10
+
+            fig, ax = plt.subplots(sightlines_to_plot*2, 1, 
+                                    figsize=(28, 3*2*sightlines_to_plot))
+            fig.subplots_adjust(wspace=0, hspace=0)
+            
+            axis = np.arange(x.shape[1]) /  (x.shape[1])
+            
+            ax[0].text( 0.01,0.8, file.rstrip(".npy"), transform = ax[0].transAxes)
+
+            
+            for los in range(sightlines_to_plot):
+                
+                ax[los*2].step(axis, x[los], where='mid', linestyle='-', 
+                                linewidth=2, color='black', alpha=1)
+                ax[los*2].set_xlim(np.min(axis), np.max(axis))
+                ax[los*2].set_ylabel(self.input_quantity)
+                
+                ax[los*2+1].step(axis, y[los], where='mid', color='black', linestyle='-', 
+                                linewidth=2, alpha=.6)
+                ax[los*2+1].step(axis, mean[los], where='mid', color='black', linestyle='--', 
+                                 linewidth=2, alpha=.6)
+                ax[los*2+1].fill_between(axis, upper_1sigma[los], y2=lower_1sigma[los],
+                                     color='red', alpha=.2)
+                ax[los*2+1].set_xlim(np.min(axis), np.max(axis))
+                ax[los*2+1].set_ylabel(self.output_quantity)
+
+
+            fig.savefig(self.output_dir+'los_'+self.input_quantity+'_'+self.output_quantity+"_"+file.rstrip(".npy")+'.pdf',format='pdf', dpi=90, 
+                        bbox_inches = 'tight')
+            plt.close()
+            
+            
+            filename = self.output_dir+'predict_'+self.input_quantity+'_'+self.output_quantity+'_'+file
+            print('saving ', filename)
+
+            with open(filename, 'wb') as f:
+                np.save(f, x)
+                np.save(f, y)
+                
+                np.save(f, mean)
+                np.save(f, upper_1sigma)
+                np.save(f, lower_1sigma)
+                
+                
+
+
+        
+        
+     
