@@ -44,18 +44,18 @@ def main():
     
     # TRAIN SEARCH PARAMS -- NETWORK ARCHITECTURE
     # ResNET, ConvNet, MLPNet
-    parser.add_argument("--network", default="MLPNet")
-    parser.add_argument("--lr", default="0.001")
-    parser.add_argument("--batch_size", default="128")
+    parser.add_argument("--network", default="ResNet")
+    parser.add_argument("--lr", default="0.0039")
+    parser.add_argument("--batch_size", default="2048")
     parser.add_argument('--layers_per_block', action='store',
-                        default=[2], type=int, nargs='*')
+                        default=[2,3,3, 4,4,4], type=int, nargs='*')
     parser.add_argument('--features_per_block', action='store',
-                        default=[8], type=int, nargs='*')
+                        default=[32,32,32, 32,32,64], type=int, nargs='*')
     
     # DATA PROCESSING PARAMS
     # standard processing params related to data processing
     parser.add_argument("--bins", default=None)
-    parser.add_argument("--mean_flux", default=0.4)
+    parser.add_argument("--mean_flux", default=None)
     parser.add_argument("--noise", default="0.02")
     parser.add_argument("--fwhm", default="6")
     parser.add_argument("--hubble", default="0.676")
