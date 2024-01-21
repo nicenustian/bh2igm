@@ -39,7 +39,7 @@ srun python -u main.py
 
 You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using the snippet below. The code calls these fields with the same dictionary. Each data field (such as density) is given as Number of examples x Number of samples. Such as 5000 x 1024, where 5000 examples are provided each with 1024 samples. The fields can also be rebinned. The code also calculates 'flux' fields if 'opt' (optical depths are provided). To select fields for params search, training and predictions set --input_quantity and --output_quantity. For this example you can choose temp, density, tempw, densityw, flux and opt.
 
-# Code for writting files
+# Code for writing files
 ```python
 data_dict = {'opt': opt, 'density': density, 'temp': temp, 
                  'densityw': densityw, 'tempw': tempw,
@@ -55,7 +55,7 @@ You can set the related hyperparamters for grid search in OptunaTrainer.py
     def suggest_hyperparams(self):
                 
         #suggest a network
-        self.network = self.trial.suggest_categorical("network", ["MLPNet"])#,"ConvNet", "ResNet"])
+        self.network = self.trial.suggest_categorical("network", ["MLPNet","ConvNet", "ResNet"])
         
         #choose hyper parameters for model training
         self.lr = self.trial.suggest_float('lr', 1e-4, 0.5, log=True)
