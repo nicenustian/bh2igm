@@ -1,23 +1,19 @@
-# Using Bayesian network to predict Intergatalctic medium gas conditions using supermassive balck holes spectra
+# Using Bayesian network to predict Intergatalctic Medium gas conditions using supermassive black holes spectra
 
-This code finds an optimal architecture, search for hyperparameters (using OPTUNA code), trains and make predictions using LYMAN alpha part of sumilated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utlized for ANY 1D signals using supervised ML. This code utlized deep networks ConvNet, ResNet and MLPNet. The code can be run ons HPC utlizing multiple GPUS on a single node.
+This code finds an optimal architecture, search for hyperparameters (using OPTUNA code), trains and make predictions using LYMAN alpha part of sumilated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utilized for ANY 1D signals using supervised ML. This code uses deep networks ConvNet, ResNet and MLPNet. The code can be run on HPC utlizing multiple GPU's on a single node.
 
-# submission script to MPCDF RAVEN HPC
+# submission script to MPCDF Raven
 ```command
 #SBATCH -e ./out.err.%j
-
 # Initial working directory:
 #SBATCH -D ./
 # Job name
 #SBATCH -J train_gpu
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
-
-# --- uncomment to use 4 GPUs on a full node ---
 #SBATCH --gres=gpu:a100:4
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=500000
-#
 #SBATCH --mail-type=none
 #SBATCH --mail-user=userid@example.mpg.de
 #SBATCH --time=24:00:00
@@ -37,7 +33,7 @@ module load tensorflow-probability/0.14.1
 srun python -u main.py
 ```
 
-You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using this snippet. The code calls these fields with the same dictionary. Each data field (such as density)  is given as Number of Examples x Number of samples. For exmaple 5000 x 1024, where 5000 example are provided each with 1024 samples.
+You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using the snippet below. The code calls these fields with the same dictionary. Each data field (such as density) is given as Number of examples x Number of samples. Such as 5000 x 1024, where 5000 examples are provided each with 1024 samples. The fields can also be rebinned. The code also calculates 'flux' fields if 'opt' (optical depths are provided). To select fields for params search, training and predictions set --input_quantity and --output_quantity. For this example you can choose temp, density, tempw, densityw, flux and opt.
 
 # Code for writting files
 ```python
@@ -92,6 +88,7 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
                [--layers_per_block [LAYERS_PER_BLOCK ...]] [--features_per_block [FEATURES_PER_BLOCK ...]] [--bins BINS] [--mean_flux MEAN_FLUX]
                [--noise NOISE] [--fwhm FWHM] [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--seed_int SEED_INT]
 ```
+
 # Movie - output trhough two layerered ConvNet during training
 
 
