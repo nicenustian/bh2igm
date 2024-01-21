@@ -1,5 +1,4 @@
 # Movie - outputs through two layerered ConvNet during training
-
 https://github.com/nicenustian/bh2igm/assets/111900566/9a2ed90b-2d7d-4d88-a74c-9f39815e1a75
 
 
@@ -93,4 +92,3 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
                [--layers_per_block [LAYERS_PER_BLOCK ...]] [--features_per_block [FEATURES_PER_BLOCK ...]] [--bins BINS] [--mean_flux MEAN_FLUX]
                [--noise NOISE] [--fwhm FWHM] [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--seed_int SEED_INT]
 ```
-
