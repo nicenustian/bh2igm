@@ -1,10 +1,45 @@
 # Using Bayesian network to predict Intergatalctic medium gas conditions using supermassive balck holes spectra
 
-This code finds an optimal architecture, search for hyperparameters, trains and make predictions using LYAMAN alpha part of sumilated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utlized for ANY 1D signals using supervised ML. This code utlized deep networks ConvNet, ResNet and MLPNet. 
+This code finds an optimal architecture, search for hyperparameters (using OPTUNA code), trains and make predictions using LYMAN alpha part of sumilated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utlized for ANY 1D signals using supervised ML. This code utlized deep networks ConvNet, ResNet and MLPNet. The code can be run ons HPC utlizing multiple GPUS on a single node.
 
-You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using this snippet. The code calls these fields with the same dictionary. Each data field (such as density)  is given as Number of Examples x Number of samples fashion. For exmaple 5000 x 1024, where 5000 exmaple are provided each with 1024 samples.
+# submission script to MPCDF RAVEN HPC
+```command
+#SBATCH -e ./out.err.%j
 
-# Save multiple named arrays to the same file
+# Initial working directory:
+#SBATCH -D ./
+# Job name
+#SBATCH -J train_gpu
+#SBATCH --ntasks=1
+#SBATCH --constraint="gpu"
+
+# --- uncomment to use 4 GPUs on a full node ---
+#SBATCH --gres=gpu:a100:4
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=500000
+#
+#SBATCH --mail-type=none
+#SBATCH --mail-user=userid@example.mpg.de
+#SBATCH --time=24:00:00
+
+export TF_FORCE_GPU_ALLOW_GROWTH=true
+
+module purge
+module load intel/21.3.0
+module load anaconda/3/2021.11
+module load keras/2.6.0
+module load keras-preprocessing/1.1.2
+module load cuda/11.4
+module load tensorboard/2.8.0
+module load tensorflow/gpu-cuda-11.4/2.6.0
+module load tensorflow-probability/0.14.1
+
+srun python -u main.py
+```
+
+You need to provide dataset files in a folder and use option --dataset_dir to provide the folder name. The files are written using this snippet. The code calls these fields with the same dictionary. Each data field (such as density)  is given as Number of Examples x Number of samples. For exmaple 5000 x 1024, where 5000 example are provided each with 1024 samples.
+
+# Code for writting files
 ```python
 data_dict = {'opt': opt, 'density': density, 'temp': temp, 
                  'densityw': densityw, 'tempw': tempw,
@@ -14,29 +49,51 @@ with open(save_file, 'wb') as f:
     np.savez(f, **data_dict)
 ```
 
+You can set the related hyperparamters for grid search in OptunaTrainer.py
 
-# The output at the end of each layer with 2-layered convolutional network during training
-https://github.com/nicenustian/lya-flux-to-density-temp-with-bayesian-networks/assets/111900566/1f08488b-1a3e-46ac-ac50-ae69d0a349d9
-
-
-
-# The output at each layer with 2-layered convolutional network during training
-https://github.com/nicenustian/lya-flux-to-density-temp-with-bayesian-networks/assets/111900566/416ec95f-07cf-4ee4-811a-4824525dd1da
-
+```python
+    def suggest_hyperparams(self):
+                
+        #suggest a network
+        self.network = self.trial.suggest_categorical("network", ["MLPNet"])#,"ConvNet", "ResNet"])
+        
+        #choose hyper parameters for model training
+        self.lr = self.trial.suggest_float('lr', 1e-4, 0.5, log=True)
+        # batch size and features per block in power od two
+        self.batch_size = 2**self.trial.suggest_int("batch_size", 8, 10)
+        self.num_blocks = self.trial.suggest_int("num_blocks", 1, 6)
+        
+        self.layers_per_block = np.ones(self.num_blocks, dtype=np.int32)
+        features_log2 = np.ones(self.num_blocks, dtype=np.int32)
+        
+        self.layers_per_block[0] = self.trial.suggest_int("layers_per_block1", 1, 2)
+        features_log2[0] = self.trial.suggest_int("features_per_block1", 1, 5)
+        
     
-usage: main.py [-h] [--epochs EPOCHS] [--noise NOISE] [--patience_epochs PATIENCE_EPOCHS]
-               [--train_fraction TRAIN_FRACTION] [--seed SEED] [--redshift REDSHIFT] [--fwhm FWHM]
-               [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--bins BINS]
-               [--mean_flux MEAN_FLUX] [--seed_int SEED_INT] [--dataset_dir DATASET_DIR]
-               [--output_dir OUTPUT_DIR] [--network NETWORK] [--batch_size BATCH_SIZE] [--lr LR]
-               [--features_per_block [FEATURES_PER_BLOCK ...]] [--layers_per_block [LAYERS_PER_BLOCK ...]]
+        for ci in range(1, self.num_blocks):
 
-```command
-
+            self.layers_per_block[ci] = self.trial.suggest_int("layers_per_block"+str(ci+1), 
+                self.layers_per_block[ci-1], self.max_layers_per_block)
+            
+            features_log2[ci] = self.trial.suggest_int("features_per_block"+str(ci+1), 
+                                   features_log2[ci-1], 
+                                   features_log2[ci-1]+1)
+            
+        
+        self.features_per_block = np.int32(2**features_log2)
 ```
 
-Epoch 10 26 [sec]  improve_count = 1
-train nll = 0.643188 kll = 0.000000 mae = 0.292537 sigma_cov = 0.978841
-test nll = 0.615306 kll = 0.000000 mae = 0.262363 sigma_cov = 0.984722
-saving  output/history_densityw.npy
+```command  
+usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_QUANTITY] [--output_dir OUTPUT_DIR] [--redshift REDSHIFT]
+               [--dataset_dir DATASET_DIR] [--dataset_file_filter DATASET_FILE_FILTER] [--prediction_file_filter PREDICTION_FILE_FILTER]
+               [--noweights NOWEIGHTS] [--train_fraction TRAIN_FRACTION] [--seed SEED] [--grid_search GRID_SEARCH] [--load_study] [--study_file STUDY_FILE]
+               [--trails TRAILS] [--search_epochs SEARCH_EPOCHS] [--search_patience_epochs SEARCH_PATIENCE_EPOCHS] [--epochs EPOCHS]
+               [--patience_epochs PATIENCE_EPOCHS] [--load_best_model] [--network NETWORK] [--lr LR] [--batch_size BATCH_SIZE]
+               [--layers_per_block [LAYERS_PER_BLOCK ...]] [--features_per_block [FEATURES_PER_BLOCK ...]] [--bins BINS] [--mean_flux MEAN_FLUX]
+               [--noise NOISE] [--fwhm FWHM] [--hubble HUBBLE] [--omegam OMEGAM] [--skewer_length SKEWER_LENGTH] [--seed_int SEED_INT]
+```
+# Movie - output trhough two layerered ConvNet during training
+
+
+
 ```
