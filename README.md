@@ -108,3 +108,7 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
 # using flux field to predict density field
 ![Screenshot 2024-01-21 at 10 01 04](https://github.com/nicenustian/bh2igm/assets/111900566/a052a96f-15df-4207-bc09-87b3894e70f4)
 
+# using flux to predict opt field (shown in log scale but tranined in linear scale)
+![Screenshot 2024-01-21 at 13 39 05](https://github.com/nicenustian/bh2igm/assets/111900566/e9f30811-b244-4198-84bf-d0d285965253)
+
+
