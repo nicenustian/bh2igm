@@ -4,7 +4,7 @@ https://github.com/nicenustian/bh2igm/assets/111900566/9a2ed90b-2d7d-4d88-a74c-9
 
 # Using Bayesian network to predict Intergatalctic Medium gas conditions using supermassive black holes spectra
 
-This code finds an optimal architecture, search for hyperparameters (using OPTUNA code), trains and make predictions using LYMAN alpha part of sumilated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utilized for ANY 1D signals using supervised ML. This code uses deep networks ConvNet, ResNet and MLPNet. The code can be run on HPC utlizing multiple GPU's on a single node.
+This code finds an optimal architecture, search for hyperparameters (using OPTUNA code), trains and make predictions using LYMAN alpha part of simulated 1D super massive black hole spectra and converts it to intergalactic medium gas conditions along the line of sight. However, this code easily be utilized for ANY 1D signals using supervised ML. This code uses deep networks ConvNet, ResNet and MLPNet. The code can be run on HPC utlizing multiple GPU's on a single node.
 
 # submission script to MPCDF Raven
 ```command
