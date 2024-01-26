@@ -16,37 +16,38 @@ def main():
     parser.add_argument("--input_quantity", default="flux")
     parser.add_argument("--output_quantity", default="tempw")
     parser.add_argument("--output_dir", default="ml_outputs")
-    parser.add_argument("--redshift", default="4.0")
-    parser.add_argument("--dataset_dir", default="dataset_files_z4.0")
+    parser.add_argument("--redshift", default="4")
+    parser.add_argument("--dataset_dir", default="dataset_files")
     parser.add_argument("--dataset_file_filter", default="train")
     parser.add_argument("--prediction_file_filter", default="model")
-    parser.add_argument("--noweights", default=False)
     parser.add_argument("--train_fraction", default="0.8")
-    parser.add_argument("--seed", default="12345")
-    
+    parser.add_argument("--seed_int", default="12345")
     
     # GRID SEARCH PARAMS
-    parser.add_argument("--grid_search", default=True)
+    parser.add_argument("--grid_search", default=False)
     parser.add_argument("--load_study", action='store_true', default=False)
     parser.add_argument("--study_file", default="hyperparams_search")
     parser.add_argument("--trails", default="20")
-    parser.add_argument("--search_epochs", default="100")
-    parser.add_argument("--search_patience_epochs", default="100")
+    parser.add_argument("--search_epochs", default="20")
+    parser.add_argument("--search_patience_epochs", default="20")
 
 
     # TRAIN SEARCH PARAMS
     # default hyper params if the no grid search is enabled
     # otherwise these params are set by Optuna grid search
-    parser.add_argument("--epochs", default="100")
-    parser.add_argument("--patience_epochs", default="100")
+    parser.add_argument("--epochs", default="40")
+    parser.add_argument("--patience_epochs", default="40")
     parser.add_argument('--load_best_model', action='store_true', default=False)
     
     
     # TRAIN SEARCH PARAMS -- NETWORK ARCHITECTURE
     # ResNET, ConvNet, MLPNet
+    # If grid search is enabled these numbers are replaced by the 
+    # results from Optuna search
     parser.add_argument("--network", default="ResNet")
-    parser.add_argument("--lr", default="0.0039")
+    parser.add_argument("--lr", default="1e-4")
     parser.add_argument("--batch_size", default="2048")
+    parser.add_argument("--noweights", default=True)
     parser.add_argument('--layers_per_block', action='store',
                         default=[2,3,3, 4,4,4], type=int, nargs='*')
     parser.add_argument('--features_per_block', action='store',
@@ -56,12 +57,15 @@ def main():
     # standard processing params related to data processing
     parser.add_argument("--bins", default=None)
     parser.add_argument("--mean_flux", default=None)
+    # Noise value to be added serves as one sigma level of
+    # Gaussian noise with zero mean
+    # Must be positive. 0 means no noise
     parser.add_argument("--noise", default="0.02")
     parser.add_argument("--fwhm", default="6")
+    parser.add_argument("--quasar", default="J021043")
     parser.add_argument("--hubble", default="0.676")
     parser.add_argument("--omegam", default="0.305147")
     parser.add_argument("--skewer_length", default="20")
-    parser.add_argument("--seed_int", default="12345")
 
 
     args = parser.parse_args()
@@ -71,6 +75,7 @@ def main():
     skewer_length = np.float32(args.skewer_length)
     train_fraction = np.float32(args.train_fraction)
     noise = np.float32(args.noise)
+    
 
     hubble = np.float32(args.hubble)
     omegam = np.float32(args.omegam)
@@ -114,20 +119,20 @@ def main():
           epochs, mean_flux, patience_epochs, dataset_dir)
 
     ##################################################################################
-    
+    '''
     print()
     print('MAKING DATASET..')
 
     # collect, normalize and shape data for training and validation
-    dp = DataProcessor(dataset_dir, args.dataset_file_filter, 
+    dp = DataProcessor(dataset_dir, args.dataset_file_filter, args.quasar,
                         output_dir, input_quantity, output_quantity, args.noweights,
-                        redshift, 
-                        skewer_length, hubble, omegam, fwhm, bins, mean_flux, 
-                        seed_int)
+                        redshift, skewer_length, hubble, omegam, fwhm, bins, mean_flux, 
+                        noise, seed_int)
 
     dp.make_dataset(True)
     
-    # if grid search is true replace the hyper params using grid search
+    
+    # if grid search is true replace the hyperparams using grid search
     if args.grid_search:
         print()
         print('GRID SEARCH..')
@@ -146,7 +151,8 @@ def main():
     
     print()
     print('ML TRAINING..')
-    nnt = NeuralNetworkTrainer(dp.get_output_dir(), network, seed_int, args.load_best_model,
+    nnt = NeuralNetworkTrainer(dp.get_output_dir(), redshift, network, 
+                               seed_int, args.load_best_model,
                                input_quantity, output_quantity)
     nnt.set_dataset(dp.get_dataset(), dp.get_files_list(), 
                     dp.get_post_file_name(), noise, 
@@ -158,26 +164,31 @@ def main():
     del dp
     del nnt
     
+    '''
     ###########################################################################
+    
     
     print()
     print('PREDICTIONS..')
     
     # collect, normalize and shape data for predictions
-    dp = DataProcessor(dataset_dir, args.prediction_file_filter, 
-                       output_dir, input_quantity, output_quantity, args.noweights,
-                       redshift, skewer_length, hubble, omegam, fwhm, bins, mean_flux, 
-                       seed_int)
+    dp = DataProcessor(dataset_dir, args.prediction_file_filter, args.quasar,
+                        output_dir, input_quantity, output_quantity, args.noweights,
+                        redshift, skewer_length, hubble, omegam, fwhm, bins, mean_flux, 
+                        noise, seed_int)
     # With no normalizing or shuffling
     dp.make_dataset(False)
     
-    nnt = NeuralNetworkTrainer(dp.get_output_dir(), network, seed_int, True,
-                               input_quantity, output_quantity)
+    nnt = NeuralNetworkTrainer(dp.get_output_dir(), redshift, network, seed_int, True,
+                                input_quantity, output_quantity)
+    
     nnt.set_dataset(dp.get_dataset(), dp.get_files_list(),
                     dp.get_post_file_name(), noise, 
                       None, None, train_fraction)
         
     nnt.set_ml_model(layers_per_block, features_per_block)
+    if args.quasar != None:
+        nnt.predict_obs_los(dataset_dir, args.quasar)
     nnt.predict(dp)
     
     ############################################################################
@@ -185,7 +196,7 @@ def main():
 
 if __name__ == "__main__":
     # Check the number of arguments passed
-    if len(sys.argv) > 20:
+    if len(sys.argv) > 33:
         print("Too many arguments..")
     else:
         main()
