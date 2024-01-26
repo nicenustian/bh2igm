@@ -12,6 +12,7 @@ class DataProcessor:
                  self,
         dataset_dir: str,
         dataset_file_filter: str,
+        quasar : str,
         output_dir: str,
         input_quantity : str,
         output_quantity : str,
@@ -23,12 +24,14 @@ class DataProcessor:
         fwhm: float,
         bins: int,
         mean_flux: float,
+        noise: float,
         seed: int
     ) -> None:
         
         
         self.dataset_dir = dataset_dir
         self.dataset_file_filter = dataset_file_filter
+        self.quasar = quasar
         self.output_dir = output_dir
         self.input_quantity = input_quantity
         self.output_quantity = output_quantity
@@ -41,12 +44,14 @@ class DataProcessor:
         self.fwhm = fwhm
         self.bins = bins
         self.mean_flux = mean_flux
+        self.noise = noise
         self.seed = seed
         self.uf = UtilityFunctions()
         
         self.xmean = 0
         self.xvar = 1
         self.index = []
+        self.quasar_file = None
         
         self.read_files_list()
         self.post_file_name()
@@ -78,27 +83,58 @@ class DataProcessor:
     
     def get_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
                                    np.ndarray, float, float]:
-        return self.xdataset, self.ydataset, self.wdataset, \
-    self.xmean, self.xvar, self.index
+        return self.xdataset, self.ydataset, self.ndataset, \
+            self.wdataset, self.xmean, self.xvar
 
 
     def read_files_list(self) -> NoReturn:
         if os.path.exists(self.dataset_dir):
+            
+            redshift_str = 'z'+"{:.2f}".format(self.redshift)
         
             file_list = os.listdir(self.dataset_dir)
             filtered_files = [filename for filename in file_list
-                              if self.dataset_file_filter in filename]
-            self.files_list = sorted(filtered_files)            
+                              if (self.dataset_file_filter in filename and 
+                                  redshift_str in filename)]
+            
+            self.files_list = sorted(filtered_files)
             self.total_models = len(self.files_list)
+            
+            if self.quasar != None:
+                filtered_files = [filename for filename in file_list
+                              if (self.quasar in filename and 
+                                  redshift_str in filename)]
+                if len(filtered_files) == 0:
+                    raise ValueError('No observational file provided in the directory' )
+                else:
+                    self.quasar_file = filtered_files[0]
+                    _, self.mean_flux, self.fwhm, self.noise, self.bins, \
+                        self.flux_level, self.noise_level = \
+                        self.uf.read_quasar_file(self.dataset_dir+self.quasar_file)
+                    
         else:
             raise ValueError('directory: {self.dataset_dir} doest not exist' )
+            
+        if self.total_models == 0:
+            raise ValueError('Not enough files in the directory with substring "{}" in their name'.format(self.dataset_file_filter))
 
         return 
-        
+    
 
     def post_file_name(self) -> NoReturn:
-        self.post_output = '_mflux'+"{:.4f}".format(self.mean_flux)+\
-        '_fwhm'+"{:.2f}".format(self.fwhm)+'_z'+"{:.2f}".format(self.redshift)
+        
+        if self.quasar == None:
+            self.post_output = '_mflux'+"{:.4f}".format(self.mean_flux)+\
+            '_fwhm'+"{:.2f}".format(self.fwhm)+\
+                '_bins'+str(int((self.bins)))+\
+                '_noise'+"{:.2f}".format(self.noise)+\
+            '_z'+"{:.2f}".format(self.redshift)
+        else:
+            self.post_output = '_'+self.quasar+'_mflux'+"{:.4f}".format(self.mean_flux)+\
+            '_fwhm'+"{:.2f}".format(self.fwhm)+\
+                '_bins'+str(int((self.bins)))+\
+                '_noise'+"{:.2f}".format(self.noise)+\
+            '_z'+"{:.2f}".format(self.redshift)
 
         self.output_dir = self.output_dir.replace("/", "")+self.post_output+"/"
         
@@ -111,7 +147,7 @@ class DataProcessor:
     
     
     def read_skewers(self) -> NoReturn:
-        # check if the directory exists, and if not, raise error
+        # check if the file exists, and if not, raise error
         filename = self.dataset_dir+self.filename
         
         if os.path.exists(filename):
@@ -148,7 +184,7 @@ class DataProcessor:
             elif self.output_quantity == "flux" and "opt" in data:
                 # this function returns flux
                 self.y = self.process_opt(data["opt"])
-            else:    
+            else:
                 print('The input', self.output_quantity ,'does not exist')
 
             
@@ -157,9 +193,18 @@ class DataProcessor:
             else:
                 self.w = np.ones(self.x.shape)
                 
-            print('input', self.input_quantity, self.x.shape, np.mean(self.x))
-            print('output', self.output_quantity, self.y.shape, np.mean(self.y))
-            print("weights", self.w.shape, np.mean(self.w))
+            if self.quasar_file == None:
+                self.n  = np.full(self.x.shape, self.noise, dtype=np.float64)
+            else:             
+                self.n = np.reshape(self.noise_level[self.uf.closest_argmin(
+                    self.x.flatten(), self.flux_level)], self.x.shape)
+
+                
+            print('input (shape, mean)', self.input_quantity, self.x.shape, np.mean(self.x))
+            print('output (shape, mean)', self.output_quantity, self.y.shape, np.mean(self.y))
+            print("noise (shape mean)", self.n.shape, np.mean(self.n))
+            if not self.noweights:
+                print("weights (shape mean)", self.w.shape, np.mean(self.w))
                   
         else:
             raise ValueError('file: {filename} doest not exist' )
@@ -275,16 +320,18 @@ class DataProcessor:
                 initialised = True
                 self.xdataset = self.x
                 self.ydataset = self.y
+                self.ndataset = self.n
                 self.wdataset = self.w
             else:
                 self.xdataset = np.vstack( (self.xdataset, self.x) )
                 self.ydataset = np.vstack( (self.ydataset, self.y) )
+                self.ndataset = np.vstack( (self.ndataset, self.n) )
                 self.wdataset = np.vstack( (self.wdataset, self.w) )
-
-            self.index = np.arange(self.xdataset.shape[0])
 
 
     def shuffle_dataset(self) -> NoReturn:
+        
+        #self.index = np.random.randint(0, self.xdataset.shape[0], self.xdataset.shape[0])
         
         sightline_per_model = np.int32(self.xdataset.shape[0] / self.total_models )
         index = np.zeros(self.xdataset.shape[0])
@@ -292,10 +339,11 @@ class DataProcessor:
         for i in range(len(index)):
             index[i] = (i%self.total_models) * sightline_per_model + \
             np.int32(i/self.total_models)
-            
-        self.index = index.astype('int32')
+         
+        self.index = index.astype('int')    
         self.xdataset = self.xdataset[self.index]
         self.ydataset = self.ydataset[self.index]
+        self.ndataset = self.ndataset[self.index]
         self.wdataset = self.wdataset[self.index]
 
 
@@ -304,15 +352,17 @@ class DataProcessor:
         self.stack_dataset()
         print()
         
-        print(self.input_quantity, self.output_quantity, 'before scaling mean ', 
-              np.mean(self.xdataset), np.mean(self.ydataset), np.mean(self.wdataset))
+        print(self.input_quantity, self.output_quantity, 'noise, weights', 'mean before scaling ', 
+              np.mean(self.xdataset), np.mean(self.ydataset), 
+              np.mean(self.ndataset), np.mean(self.wdataset))
         
         if scale_and_shuffle:
             self.scale_dataset()
             self.shuffle_dataset()
             
-        print(self.input_quantity, self.output_quantity, 'weights', 'after scaling mean ', 
-                  np.mean(self.xdataset), np.mean(self.ydataset), np.mean(self.wdataset))
+        print(self.input_quantity, self.output_quantity, 'mean after scaling ', 
+                  np.mean(self.xdataset), np.mean(self.ydataset))
             
-        print(self.input_quantity, self.output_quantity, 'weights', 'shapes', 
-                  self.xdataset.shape, self.ydataset.shape, self.wdataset.shape)
+        print(self.input_quantity, self.output_quantity, ' noise and weights ','shapes', 
+                  self.xdataset.shape, self.ydataset.shape, 
+                  self.ndataset.shape, self.wdataset.shape)
