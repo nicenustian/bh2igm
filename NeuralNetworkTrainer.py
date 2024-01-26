@@ -15,15 +15,17 @@ from UtilityFunctions import UtilityFunctions
 
 
 class NeuralNetworkTrainer:
-    def __init__(self, output_dir, network, seed, load_best_model,
+    def __init__(self, output_dir, redshift, network, seed, load_best_model,
                  input_quantity, output_quantity):
         
         self.output_dir = output_dir
+        self.redshift = redshift
         self.seed = seed
         self.load_best_model = load_best_model
         self.input_quantity = input_quantity
         self.output_quantity = output_quantity
         self.network = network
+        self.uf = UtilityFunctions()
 
 
         self.set_seed()
@@ -46,32 +48,7 @@ class NeuralNetworkTrainer:
         # Set a fixed value for the hash seed
         os.environ["PYTHONHASHSEED"] = str(self.seed)
         print(f"Random seed set as {self.seed}")
-
-      
-    def set_noise(self):
-        
-        #utilities = UtilityFunctions()
-        
-        print('noise', self.noise_model)
-    
-        if isinstance(self.noise_model, np.float32):
-            self.snr = 1/self.noise_model
-            print('fixed snr=', np.int32(self.snr))
-            self.noise = np.full(self.x.shape, self.noise_model, dtype=np.float64)
-        else:
-            self.snr = np.int32(np.mean(1.0/self.noise_model[self.noise_model>0]))
-            self.noise = np.zeros(self.x.shape, dtype=np.float64)
-            
-            # #normalised the flux bins
-            # self.flux_bins = (self.flux_bins - self.flux_mean)/self.flux_var
-            # for i in range(self.Ntotal):
-            #     #get the corresponding noise for each flux pixel
-            #     self.noise[i] = self.noise_model[utilities.closest_argmin(self.flux[i], self.flux_bins)]
-            #     #adjust the flux pixels to one, si they become featureless regions
-            #     self.flux[i][self.bad==1] = 1.0
-            #     #noise to zero in bad pixels regions
-            #     self.noise[i][self.bad==1] = 0.0
-  
+         
     
     def set_ml_model(self, layers_per_block, features_per_block): 
         
@@ -121,15 +98,12 @@ class NeuralNetworkTrainer:
       
       self.x = ds[0]
       self.y = ds[1]
-      self.w = ds[2]
-      self.xscalar_mean = ds[3]
-      self.xscalar_var = ds[4]
-      self.index = ds[5]
+      self.n = ds[2]
+      self.w = ds[3]
+      self.xscalar_mean = ds[4]
+      self.xscalar_var = ds[5]
+      
       self.files_list = files_list
-  
-      self.noise_model = noise_model
-      self.flux_bins = flux_bins
-      self.bad = bad
       self.train_fraction = train_fraction
       
       self.Npixels = self.x.shape[1]
@@ -137,21 +111,20 @@ class NeuralNetworkTrainer:
       self.Nnodes = self.Npixels
       self.Ntrain = np.int32(self.Ntotal*self.train_fraction)
       self.Ntest = self.Ntotal - self.Ntrain
-      self.set_noise()
       
       self.post_output = post_output
    
       if self.network != "MLPNet":
           self.x = np.expand_dims(self.x, axis=2)    
-          self.noise = np.expand_dims(self.noise, axis=2)
+          self.n = np.expand_dims(self.n, axis=2)
   
       self.train_data = tf.data.Dataset.from_tensor_slices((
           self.x[:self.Ntrain], self.y[:self.Ntrain], 
-          self.noise[:self.Ntrain],  self.w[:self.Ntrain]))
+          self.n[:self.Ntrain],  self.w[:self.Ntrain]))
       
       self.test_data = tf.data.Dataset.from_tensor_slices((
           self.x[self.Ntrain:], self.y[self.Ntrain:], 
-          self.noise[self.Ntrain:],  self.w[self.Ntrain:]))
+          self.n[self.Ntrain:],  self.w[self.Ntrain:]))
       
       
       options = tf.data.Options()
@@ -495,11 +468,97 @@ class NeuralNetworkTrainer:
         return (data * np.sqrt(var)) + mean
     
     
+    def predict_obs_los(self, dataset_dir, quasar):
+                
+        self.read_scalars_file()            
+        print('scalars..', self.xscalar_mean, self.xscalar_var, 
+              self.yscalar_mean, self.yscalar_var)
+        
+        x = self.uf.read_quasar_file(
+            dataset_dir+quasar+'_z'+
+            "{:.2f}".format(self.redshift)+'.npy')[0]
+
+        if len(x.shape) == 1:
+            x = np.expand_dims(np.expand_dims(x, axis=0), axis=2)
+        else:
+            x = np.expand_dims(x, axis=2)
+        
+        dist = self.ml_model(tf.convert_to_tensor(
+            self.normalize(x, self.xscalar_mean, self.xscalar_var)), 
+            training=False)
+            
+        mean = dist.mean()
+        std = dist.stddev()
+
+        upper_1sigma = mean + std
+        lower_1sigma = mean - std
+
+        x = np.squeeze(x, axis=2)
+            
+        mean = self.denormalize(mean, self.yscalar_mean, self.yscalar_var)
+        upper_1sigma = self.denormalize(upper_1sigma, self.yscalar_mean, self.yscalar_var)
+        lower_1sigma = self.denormalize(lower_1sigma, self.yscalar_mean, self.yscalar_var)
+        
+        
+        print(self.output_quantity,'mean predictions', np.mean(mean), 
+              np.mean(upper_1sigma), np.mean(lower_1sigma))            
+        print(x.shape, mean.shape, std.shape)
+            
+        
+        if x.shape[0] <= 10:
+            sightlines_to_plot = x.shape[0]
+        else:
+            sightlines_to_plot = 10
+        
+
+        fig, ax = plt.subplots(sightlines_to_plot*2, 1, 
+                                figsize=(28, 3*2*sightlines_to_plot))
+        fig.subplots_adjust(wspace=0, hspace=0)
+        
+        axis = np.arange(x.shape[1]) /  (x.shape[1])
+                
+        for los in range(sightlines_to_plot):
+            
+            ax[los*2].step(axis, x[los], where='mid', linestyle='-', 
+                            linewidth=2, color='black', alpha=1)
+            ax[los*2].set_xlim(np.min(axis), np.max(axis))
+            ax[los*2].set_ylabel(self.input_quantity)
+            if self.input_quantity=='opt':
+                ax[los*2].set_yscale('log')
+            
+            ax[los*2+1].step(axis, mean[los], where='mid', color='black', linestyle='--', 
+                             linewidth=2, alpha=.6)
+            ax[los*2+1].fill_between(axis, upper_1sigma[los], y2=lower_1sigma[los],
+                                 color='red', alpha=.2)
+            ax[los*2+1].set_xlim(np.min(axis), np.max(axis))
+            ax[los*2+1].set_ylabel(self.output_quantity)
+            if self.output_quantity=='opt':
+                ax[los*2+1].set_yscale('log')
+
+
+        fig.savefig(self.output_dir+quasar+'_'+self.input_quantity+'_'+
+                    self.output_quantity+'.pdf',
+                    format='pdf', dpi=90, bbox_inches = 'tight')
+        plt.close()
+        
+        
+        infilename = self.output_dir+'predict_'+quasar+'_'+self.input_quantity+'_'+\
+        self.output_quantity+'.npy'
+        print('saving ', infilename)
+
+        with open(infilename, 'wb') as f:
+            np.save(f, x)
+            np.save(f, mean)
+            np.save(f, upper_1sigma)
+            np.save(f, lower_1sigma)
+        
+                   
+    
     def predict(self, dpp):
                 
         self.read_scalars_file()
         if self.input_quantity == "flux":
-            self.x += self.noise*np.random.normal(0, 1, np.shape(self.x))
+            self.x += self.n*np.random.normal(0, 1, np.shape(self.x))
            
         sightline_per_model = np.int32(self.x.shape[0] / len(self.files_list))
         
@@ -550,36 +609,36 @@ class NeuralNetworkTrainer:
                                 linewidth=2, color='black', alpha=1)
                 ax[los*2].set_xlim(np.min(axis), np.max(axis))
                 ax[los*2].set_ylabel(self.input_quantity)
+                if self.input_quantity=='opt':
+                    ax[los*2].set_yscale('log')
                 
                 ax[los*2+1].step(axis, y[los], where='mid', color='black', linestyle='-', 
                                 linewidth=2, alpha=.6)
+                
                 ax[los*2+1].step(axis, mean[los], where='mid', color='black', linestyle='--', 
                                  linewidth=2, alpha=.6)
                 ax[los*2+1].fill_between(axis, upper_1sigma[los], y2=lower_1sigma[los],
                                      color='red', alpha=.2)
                 ax[los*2+1].set_xlim(np.min(axis), np.max(axis))
                 ax[los*2+1].set_ylabel(self.output_quantity)
+                if self.output_quantity=='opt':
+                    ax[los*2+1].set_yscale('log')
 
 
-            fig.savefig(self.output_dir+'los_'+self.input_quantity+'_'+self.output_quantity+"_"+file.rstrip(".npy")+'.pdf',format='pdf', dpi=90, 
+            fig.savefig(self.output_dir+'los_'+self.input_quantity+'_'+
+                        self.output_quantity+"_"+file.rstrip(".npy")+'.pdf',
+                        format='pdf', dpi=90, 
                         bbox_inches = 'tight')
             plt.close()
             
             
-            filename = self.output_dir+'predict_'+self.input_quantity+'_'+self.output_quantity+'_'+file
+            filename = self.output_dir+'predict_'+self.input_quantity+'_'+\
+            self.output_quantity+'_'+file
             print('saving ', filename)
 
             with open(filename, 'wb') as f:
                 np.save(f, x)
                 np.save(f, y)
-                
                 np.save(f, mean)
                 np.save(f, upper_1sigma)
                 np.save(f, lower_1sigma)
-                
-                
-
-
-        
-        
-     
