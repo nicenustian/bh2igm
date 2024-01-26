@@ -58,12 +58,12 @@ class OptunaTrainer:
     def suggest_hyperparams(self):
                 
         #suggest a network
-        self.network = self.trial.suggest_categorical("network", ["MLPNet","ConvNet", "ResNet"])
+        self.network = self.trial.suggest_categorical("network", ["MLPNet"])#,"ConvNet", "ResNet"])
         
         #choose hyper parameters for model training
         self.lr = self.trial.suggest_float('lr', 1e-4, 0.5, log=True)
         # batch size and features per block in power od two
-        self.batch_size = 2**self.trial.suggest_int("batch_size", 10, 13)
+        self.batch_size = 2**self.trial.suggest_int("batch_size", 8, 10)
         self.num_blocks = self.trial.suggest_int("num_blocks", 1, 6)
         
         self.layers_per_block = np.ones(self.num_blocks, dtype=np.int32)
