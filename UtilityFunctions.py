@@ -1,7 +1,27 @@
 import numpy as np
+import os
 from typing import Union, Tuple, Any
 
 class UtilityFunctions:
+    
+    def read_quasar_file(self, filename):
+        
+        if os.path.exists(filename):
+            data = np.load(filename,'rb')
+            flux = data["flux_obs"]
+            data = np.load(filename,'rb')
+            # update mean for flux, fwhm and noise
+            mean_flux = data["mean_flux"]
+            fwhm = data["fwhm"]
+            noise = data["noise"]
+            bins = data["bins"]
+            flux_level = data["flux_level"]
+            noise_level = data["noise_level"]
+        else:
+            raise ValueError('file: {infilename} doest not exist' )
+
+        return flux, mean_flux, fwhm, noise, bins, flux_level, noise_level
+    
     
     def upsample(self, data, bins, bins_ratio):
         
@@ -85,10 +105,10 @@ class UtilityFunctions:
         redshift_index,_ = self.find_nearest(data[:,0], redshift)    
         mean_flux = data[redshift_index,1] #mean flux value for sigma
         
-        # if redshift==5.0:
-        #     mean_flux = 0.135
-        # if redshift==5.2:
-        #     mean_flux = 0.114
+        if redshift==5.0:
+            mean_flux = 0.135
+        if redshift==5.2:
+            mean_flux = 0.114
         
         return mean_flux
         
