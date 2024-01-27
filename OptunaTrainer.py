@@ -5,12 +5,13 @@ from NeuralNetworkTrainer import NeuralNetworkTrainer
 
 
 class OptunaTrainer:
-    def __init__(self, output_dir, files_list, filename, load_study, 
+    def __init__(self, output_dir, redshift, files_list, filename, load_study, 
                  input_quantity, output_quantity,
                  seed_int, trails, epochs, patience_epochs,
                  train_fraction, dataset, post_file_name, noise):
         
         self.output_dir = output_dir
+        self.redshift = redshift
         self.files_list = files_list
         self.filename = filename
         self.load_study = load_study
@@ -102,7 +103,7 @@ class OptunaTrainer:
         self.trial  = trial
         self.suggest_hyperparams()
 
-        self.nnt = NeuralNetworkTrainer(self.output_dir, self.network, self.seed, False,
+        self.nnt = NeuralNetworkTrainer(self.output_dir, self.redshift, self.network, self.seed, False,
                                         self.input_quantity, self.output_quantity)
         self.nnt.set_dataset(self.dataset, self.files_list, self.post_file_name, 
                              self.noise, 
