@@ -15,8 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=("arguments"))
     parser.add_argument("--input_quantity", default="flux")
     parser.add_argument("--output_quantity", default="tempw")
-    parser.add_argument("--output_dir", default="ml_outputs")
-    parser.add_argument("--redshift", default="4")
+    parser.add_argument("--output_dir", default="ml_outputs_test")
+    parser.add_argument("--redshift", default="4.2")
     parser.add_argument("--dataset_dir", default="dataset_files")
     parser.add_argument("--dataset_file_filter", default="train")
     parser.add_argument("--prediction_file_filter", default="model")
@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--seed_int", default="12345")
     
     # GRID SEARCH PARAMS
-    parser.add_argument("--grid_search", default=False)
+    parser.add_argument("--grid_search", default=True)
     parser.add_argument("--load_study", action='store_true', default=False)
     parser.add_argument("--study_file", default="hyperparams_search")
     parser.add_argument("--trails", default="20")
@@ -119,7 +119,7 @@ def main():
           epochs, mean_flux, patience_epochs, dataset_dir)
 
     ##################################################################################
-    '''
+    
     print()
     print('MAKING DATASET..')
 
@@ -136,7 +136,7 @@ def main():
     if args.grid_search:
         print()
         print('GRID SEARCH..')
-        opt = OptunaTrainer(dp.get_output_dir(), dp.get_files_list(), 
+        opt = OptunaTrainer(dp.get_output_dir(), redshift, dp.get_files_list(), 
                             study_file, args.load_study, 
                             input_quantity, output_quantity,
                             seed_int, trails, 
@@ -190,7 +190,7 @@ def main():
     if args.quasar != None:
         nnt.predict_obs_los(dataset_dir, args.quasar)
     nnt.predict(dp)
-    
+    '''
     ############################################################################
 
 
