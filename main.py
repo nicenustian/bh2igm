@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--seed_int", default="12345")
     
     # GRID SEARCH PARAMS
-    parser.add_argument("--grid_search", default=True)
+    parser.add_argument("--grid_search",  action='store_true', default=True)
     parser.add_argument("--load_study", action='store_true', default=False)
     parser.add_argument("--study_file", default="hyperparams_search")
     parser.add_argument("--trails", default="20")
