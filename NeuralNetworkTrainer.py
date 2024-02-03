@@ -410,7 +410,7 @@ class NeuralNetworkTrainer:
              self.train_data
              #.map(self.train_data)
              .shuffle(self.Ntrain)
-             .batch(self.batch_size, drop_remainder=True)
+             .batch(self.batch_size, drop_remainder=False)
              .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
              )
         
@@ -418,7 +418,7 @@ class NeuralNetworkTrainer:
             self.test_data
             #.map(self.test_data)
             .shuffle(self.Ntest)
-            .batch(self.batch_size, drop_remainder=True)
+            .batch(self.batch_size, drop_remainder=False)
             .prefetch(buffer_size=tf.data.experimental.AUTOTUNE))
   
         
