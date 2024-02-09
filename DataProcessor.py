@@ -220,6 +220,8 @@ class DataProcessor:
             data_rebin = self.uf.downsample(data, self.bins, bins_ratio)
         elif bins_old<self.bins:
             data_rebin = self.uf.upsample(data, self.bins, bins_ratio)
+        else:
+            data_rebin = data
         
         return data_rebin
       
