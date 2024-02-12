@@ -4,6 +4,7 @@ import os
 from scipy.ndimage import convolve1d
 from typing import NoReturn, Tuple
 from UtilityFunctions import UtilityFunctions
+import warnings
 
 
 class DataProcessor:
@@ -130,6 +131,7 @@ class DataProcessor:
                 '_noise'+"{:.2f}".format(self.noise)+\
             '_z'+"{:.2f}".format(self.redshift)
         else:
+            #print('quasar', self.quasar, 'mean flux', self.mean_flux, self.fwhm, self.bins)
             self.post_output = '_'+self.quasar+'_mflux'+"{:.4f}".format(self.mean_flux)+\
             '_fwhm'+"{:.2f}".format(self.fwhm)+\
                 '_bins'+str(int((self.bins)))+\
@@ -154,7 +156,6 @@ class DataProcessor:
             data = np.load(filename,'rb')
             
             if self.input_quantity in data:
-                
                 self.x = data[self.input_quantity]
                 
                 if self.input_quantity == 'opt':
@@ -309,26 +310,38 @@ class DataProcessor:
     def stack_dataset(self) -> NoReturn:
         
         initialised = False
+        previous_sightlines = 0
 
         for mi, filename in enumerate(self.files_list):
             
             print()
             print('reading/processing file', filename)
-            
+
             self.filename = filename
             self.read_skewers()
+            
+                        
+            if mi==0:
+                previous_sightlines = self.x.shape[0]
+            else:
+                if self.x.shape[0] != previous_sightlines:
+                    print(self.x.shape[0], previous_sightlines)
+                    warnings.warn('Sightlines in file do not match with previous others will be ignored!', UserWarning)
+                else:
+                    previous_sightlines = self.x.shape[0]
+            
                 
             if initialised!=True:
                 initialised = True
-                self.xdataset = self.x
-                self.ydataset = self.y
-                self.ndataset = self.n
-                self.wdataset = self.w
+                self.xdataset = self.x[:previous_sightlines]
+                self.ydataset = self.y[:previous_sightlines]
+                self.ndataset = self.n[:previous_sightlines]
+                self.wdataset = self.w[:previous_sightlines]
             else:
-                self.xdataset = np.vstack( (self.xdataset, self.x) )
-                self.ydataset = np.vstack( (self.ydataset, self.y) )
-                self.ndataset = np.vstack( (self.ndataset, self.n) )
-                self.wdataset = np.vstack( (self.wdataset, self.w) )
+                self.xdataset = np.vstack( (self.xdataset, self.x[:previous_sightlines]) )
+                self.ydataset = np.vstack( (self.ydataset, self.y[:previous_sightlines]) )
+                self.ndataset = np.vstack( (self.ndataset, self.n[:previous_sightlines]) )
+                self.wdataset = np.vstack( (self.wdataset, self.w[:previous_sightlines]) )
 
 
     def shuffle_dataset(self) -> NoReturn:
