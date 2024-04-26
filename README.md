@@ -112,8 +112,9 @@ usage: main.py [-h] [--input_quantity INPUT_QUANTITY] [--output_quantity OUTPUT_
 ![Screenshot 2024-01-21 at 13 39 05](https://github.com/nicenustian/bh2igm/assets/111900566/e9f30811-b244-4198-84bf-d0d285965253)
 
 
+## Citation
 
-```citation
+```
 @ARTICLE{2024arXiv240405794N,
        author = {{Nasir}, Fahad and {Gaikwad}, Prakash and {Davies}, Frederick B. and {Bolton}, James S. and {Puchwein}, Ewald and {Bosman}, Sarah E.~I.},
         title = "{Deep Learning the Intergalactic Medium using Lyman-alpha Forest at $ 4 \leq z \leq 5$}",
