@@ -59,30 +59,44 @@ class OptunaTrainer:
     def suggest_hyperparams(self):
                 
         #suggest a network
-        self.network = self.trial.suggest_categorical("network", ["MLPNet"])#,"ConvNet", "ResNet"])
+        self.network = self.trial.suggest_categorical("network", ["ConvNet", "ResNet"])
         
         #choose hyper parameters for model training
         self.lr = self.trial.suggest_float('lr', 1e-4, 0.5, log=True)
-        # batch size and features per block in power od two
-        self.batch_size = 2**self.trial.suggest_int("batch_size", 8, 10)
+        
+        self.l2_factor = self.trial.suggest_float('l2_factor', 1e-4, 1e-1, log=True)
+
+        
+        # batch size and features per block in power of two
+        self.batch_size = 2**self.trial.suggest_int("batch_size", 10, 13)
+        
         self.num_blocks = self.trial.suggest_int("num_blocks", 1, 6)
         
         self.layers_per_block = np.ones(self.num_blocks, dtype=np.int32)
         features_log2 = np.ones(self.num_blocks, dtype=np.int32)
         
-        self.layers_per_block[0] = self.trial.suggest_int("layers_per_block1", 1, 2)
+        self.layers_per_block[0] = self.trial.suggest_int("layers_per_block1", 1, 4)
         features_log2[0] = self.trial.suggest_int("features_per_block1", 1, 5)
+        
+        if self.network == "ResNet":
+            self.max_layers_per_block = 4
+        elif self.network == "ConvNet":
+            self.max_layers_per_block = 8
         
     
         for ci in range(1, self.num_blocks):
 
-            self.layers_per_block[ci] = self.trial.suggest_int("layers_per_block"+str(ci+1), 
-                self.layers_per_block[ci-1], self.max_layers_per_block)
+            self.layers_per_block[ci] = self.trial.suggest_int(
+                "layers_per_block"+str(ci+1), 
+                self.layers_per_block[ci-1], 
+                self.max_layers_per_block
+                )
             
-            features_log2[ci] = self.trial.suggest_int("features_per_block"+str(ci+1), 
-                                   features_log2[ci-1], 
-                                   features_log2[ci-1]+1)
-            
+            features_log2[ci] = self.trial.suggest_int(
+                "features_per_block"+str(ci+1), 
+                features_log2[ci-1], 
+                features_log2[ci-1]+1
+                )
         
         self.features_per_block = np.int32(2**features_log2)
         
@@ -103,16 +117,23 @@ class OptunaTrainer:
         self.trial  = trial
         self.suggest_hyperparams()
 
-        self.nnt = NeuralNetworkTrainer(self.output_dir, self.redshift, self.network, self.seed, False,
-                                        self.input_quantity, self.output_quantity)
+        self.nnt = NeuralNetworkTrainer(self.output_dir, self.redshift, self.network, 
+                                        self.seed, False, self.input_quantity, 
+                                        self.output_quantity
+                                        )
+        
         self.nnt.set_dataset(self.dataset, self.files_list, self.post_file_name, 
-                             self.noise, 
-                      None, None, self.train_fraction)
+                             self.noise, None, None, self.train_fraction
+                             )
         
         self.nnt.set_ml_model(self.layers_per_block, 
-                              self.features_per_block)
+                              self.features_per_block,
+                              self.l2_factor
+                              )
+        
         best_metric = self.nnt.train(False, self.epochs, self.patience_epochs, 
-                                     self.batch_size, self.lr)
+                                     self.batch_size, self.lr
+                                     )
         
                 
         return best_metric
@@ -121,11 +142,13 @@ class OptunaTrainer:
     def run_trails(self):
         
         self.study.optimize(self.wrapper, n_trials=self.trails, 
-                            callbacks=[self.print_best_callback])
+                            callbacks=[self.print_best_callback]
+                            )
         optuna_dict = dict(self.study.best_trial.params.items())
 
         self.network = optuna_dict['network']
         self.lr = optuna_dict['lr']
+        self.l2_factor = optuna_dict['l2_factor']
         self.batch_size = 2**optuna_dict['batch_size']
         self.layers_per_block = optuna_dict['network']
 
@@ -143,9 +166,11 @@ class OptunaTrainer:
             self.features_per_block[li] = 2**optuna_dict['features_per_block'+str(li+1)]
             
         print(self.network, self.lr, self.batch_size, \
-              self.layers_per_block, self.features_per_block)
+              self.layers_per_block, self.features_per_block, 
+              self.l2_factor
+              )
         
         return self.network, self.lr, self.batch_size, \
-              self.layers_per_block, self.features_per_block
+              self.layers_per_block, self.features_per_block, self.l2_factor
             
             
