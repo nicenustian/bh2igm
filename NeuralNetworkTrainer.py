@@ -6,7 +6,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 font = {'family' : 'serif', 'weight' : 'normal','size' : 34}
 matplotlib.rc('font', **font)
-import keras.backend as K
+
+import tensorflow.keras.backend as K
 from machine_learning_models.ConvNet import ConvNet
 from machine_learning_models.ResNet import ResNet
 from machine_learning_models.MLPNet import MLPNet
@@ -50,45 +51,54 @@ class NeuralNetworkTrainer:
         print(f"Random seed set as {self.seed}")
          
     
-    def set_ml_model(self, layers_per_block, features_per_block): 
+    def set_ml_model(self, trim, layers_per_block, features_per_block, l2_factor): 
         
         self.layers_per_block = layers_per_block
         self.features_per_block = features_per_block
+        self.l2_factor = l2_factor
+        self.trim = trim
         
             
         if 'ResNet' == self.network:
             with self.strategy.scope():
                 self.ml_model  = ResNet(self.layers_per_block, 
                                         self.features_per_block, 
-                                        self. Nnodes, self.seed)
+                                        self.Nnodes - self.trim, self.seed, 
+                                        self.l2_factor
+                                        )
 
         elif  'ConvNet' == self.network:
             with self.strategy.scope():
                 self.ml_model  = ConvNet(self.layers_per_block, 
                                          self.features_per_block,
-                                         self.Nnodes, self.seed)
+                                         self.Nnodes - self.trim, self.seed,
+                                         self.l2_factor)
                 
         elif  'MLPNet' == self.network:
             with self.strategy.scope():
                 self.ml_model  = MLPNet(self.layers_per_block,
-                                        self.Nnodes, self.seed)
+                                        self.Nnodes - self.trim, self.seed,
+                                        self.l2_factor)
 
         else:
             raise ValueError('Unknown Network: {}'.format(self.network))
         
         if self.network == 'MLPNet':
-            print("network, layers, units = ", 
+            print("network, layers, units = ",
                       self.network, np.sum(self.layers_per_block), 
-                      self. Nnodes)
+                      self.Nnodes- self.trim)
         else:    
-            print("network, layers, features, units = ", 
+            print("network, layers, features, units, L2_factor = ", 
                   self.network, self.layers_per_block, self.features_per_block, 
-                  self. Nnodes)
+                  self. Nnodes - self.trim, self.l2_factor)
         
         if self.load_best_model==True:
-            ml_model_filename = self.output_dir+'nnweights_'+\
-                self.input_quantity+"_"+self.output_quantity+'/'
+                
+            ml_model_filename = self.output_dir+'/'\
+                    +self.input_quantity+"_"+self.output_quantity+"/"#'.weights.h5'
+                
             print('loading model ', ml_model_filename)
+            
             self.ml_model.load_weights(ml_model_filename).expect_partial() 
 
 
@@ -115,7 +125,7 @@ class NeuralNetworkTrainer:
       self.post_output = post_output
    
       if self.network != "MLPNet":
-          self.x = np.expand_dims(self.x, axis=2)    
+          self.x = np.expand_dims(self.x, axis=2)
           self.n = np.expand_dims(self.n, axis=2)
   
       self.train_data = tf.data.Dataset.from_tensor_slices((
@@ -136,9 +146,10 @@ class NeuralNetworkTrainer:
         
     @tf.function
     def rolling(self, x_input, shifts):
-            return tf.vectorized_map(
-                lambda x: tf.roll(x[0], shift=x[1], axis=0),
-                elems=[x_input, shifts])
+        
+        return tf.vectorized_map(
+            lambda x: tf.roll(x[0], shift=x[1], axis=0),
+            elems=[x_input, shifts])
 
 
     @tf.function
@@ -174,22 +185,35 @@ class NeuralNetworkTrainer:
     def train_model(self, x, y, n, w):
             
         shifts = tf.random.uniform(
-                shape=(tf.shape(x)[0],), maxval=self.Npixels, 
+                shape=(tf.shape(x)[0],), minval=0, maxval=self.Npixels,
                 dtype=tf.int32, seed=self.seed)
             
         x = self.rolling(x, shifts)
         y = self.rolling(y, shifts)
+        n = self.rolling(n, shifts)
+        w = self.rolling(w, shifts)
+                
+        
+        x = x[:,self.trim:]
+        y = y[:,self.trim:]
+        n = n[:,self.trim:]
+        w = w[:,self.trim:]
+        
         
         if self.input_quantity=="flux":
+            
             x += ((n/np.sqrt(self.xscalar_var))*tf.random.normal(
                 tf.shape(x), 0, 1, tf.float64, seed=self.seed))
         
         with tf.GradientTape() as tape:
-            y_pred = self.ml_model(x, training=True)
-            loss_nll = self.nll_func(tf.cast(y, dtype=self.type_casting), y_pred, 
-                            tf.cast(w, dtype=self.type_casting))/self.Ntrain
             
-            loss_kll = tf.reduce_sum(self.ml_model.losses)/self.kll_fact
+            y_pred = self.ml_model(x, training=True)
+            loss_nll = self.nll_func(tf.cast(y, dtype=self.type_casting), \
+                                     y_pred, tf.cast(w, dtype=self.type_casting)
+                                     )/self.Ntrain
+            
+            
+            loss_kll = tf.reduce_sum(self.ml_model.losses)/self.Ntrain
             loss = loss_nll + loss_kll
  
     
@@ -203,6 +227,7 @@ class NeuralNetworkTrainer:
         self.mae.update_state(self.mae_func(
             tf.cast(y, dtype=self.type_casting), y_pred.mean())
             )
+        
         self.nll_sum.update_state(loss_nll)
         self.kll_sum.update_state(loss_kll)
         self.count_sum.update_state(count)
@@ -230,22 +255,32 @@ class NeuralNetworkTrainer:
     def test_model(self, x, y, n, w):
             
         shifts = tf.random.uniform(
-                shape=(tf.shape(x)[0],), maxval=self.Npixels, dtype=tf.int32, 
+                shape=(tf.shape(x)[0],), maxval=self.Npixels, 
+                dtype=tf.int32, 
                 seed=self.seed
                 )
             
         x = self.rolling(x, shifts)
         y = self.rolling(y, shifts)
+        n = self.rolling(n, shifts)
+        w = self.rolling(w, shifts)
+        
+                
+        x = x[:,self.trim:]
+        y = y[:,self.trim:]
+        n = n[:,self.trim:]
+        w = w[:,self.trim:]
+        
                         
         if self.input_quantity=="flux":
             x += ((n/np.sqrt(self.xscalar_var))*tf.random.normal(
                 tf.shape(x), 0, 1, tf.float64, seed=self.seed))
         
         y_pred_test = self.ml_model(x, training=False)
-        loss_nll_test = self.nll_func(tf.cast(y, dtype=self.type_casting), y_pred_test,
-                       tf.cast(w, dtype=self.type_casting))/self.Ntest
+        loss_nll_test = self.nll_func(tf.cast(y, dtype=self.type_casting), \
+                                      y_pred_test, tf.cast(w, dtype=self.type_casting))/self.Ntest
             
-        loss_kll_test = tf.reduce_sum(self.ml_model.losses)     
+        loss_kll_test = tf.reduce_sum(self.ml_model.losses)/self.Ntest
         
         count_test = self.sigma_cover(tf.cast(y, dtype=self.type_casting), 
                                  y_pred_test.mean(), y_pred_test.stddev())
@@ -319,21 +354,23 @@ class NeuralNetworkTrainer:
             
         self.test_loss_nll_list.append(self.test_nll_sum.result().numpy()
                                       /self.Npixels)
+        
         self.test_loss_kll_list.append(self.test_kll_sum.result().numpy()
                                       /self.Npixels)
+        
         self.test_mae_list.append(self.test_mae.result().numpy())
         self.test_count_list.append(self.test_count_sum.result().numpy()
                                    /self.Ntest/self.Nnodes)
         
-        self.current_metric = self.test_nll_sum.result().numpy() + \
-            self.test_kll_sum.result().numpy()
+        #only log likelihood losses, Add divergence losses if bayesian
+        self.current_metric = self.test_nll_sum.result().numpy() + self.test_kll_sum.result().numpy()
 
             
         if self.current_metric <= self.best_metric:
                 self.no_improvement_count = 0
                 
-                weights_filename = self.output_dir+'nnweights_'\
-                    +self.input_quantity+"_"+self.output_quantity+'/'
+                weights_filename = self.output_dir+'/'\
+                    +self.input_quantity+"_"+self.output_quantity+"/"#+'.weights.h5'
                 print()
                 
                 if self.save_weights==True:
@@ -352,24 +389,26 @@ class NeuralNetworkTrainer:
         
         print()
         
-        print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', ' lr=', self.lr,  
+        print('Epoch', self.epoch, np.int32(time_in_sec),'[sec]', ' lr =', self.lr,  
                       ' improve_count =', self.no_improvement_count)
        
         if len(self.loss_nll_list)>0:
             print('train', "nll = {:f}".format(self.loss_nll_list[-1]), 
+                          ##"total = {:f}".format(self.loss_nll_list[-1]+self.loss_kll_list[-1]), 
                           "mae = {:f}".format(self.mae_list[-1]), 
                           "sigma_cov = {:f}".format(self.count_list[-1]))
             
-            if self.loss_kll_list[-1] !=0:
-                      print("kll = {:f}".format(self.loss_kll_list[-1]))
+            #if self.loss_kll_list[-1] !=0:
+            #          print("kll = {:f}".format(self.loss_kll_list[-1]))
 
         
         if len(self.test_loss_nll_list)>0:
             print(' test',"nll = {:f}".format(self.test_loss_nll_list[-1]), 
+                          ##"total = {:f}".format(self.test_loss_nll_list[-1]+self.test_loss_kll_list[-1]),
                           "mae = {:f}".format(self.test_mae_list[-1]), 
                           "sigma_cov = {:f}".format(self.test_count_list[-1]))
-            if self.test_loss_kll_list[-1] !=0:
-                      print("kll = {:f}".format(self.test_loss_kll_list[-1]))
+            #if self.test_loss_kll_list[-1] !=0:
+            #          print("kll = {:f}".format(self.test_loss_kll_list[-1]))
         
         
         
@@ -393,7 +432,7 @@ class NeuralNetworkTrainer:
     
 
 
-    def train(self, save_weights, epochs, patience_epochs, 
+    def train(self, save_weights, epochs, patience_epochs,
               batch_size, lr):  
 
         self.save_weights = save_weights
@@ -403,14 +442,14 @@ class NeuralNetworkTrainer:
         self.batch_size = batch_size
         self.lr = lr
         self.epochs = epochs
-        self.kll_fact = 1
+        self.kll_fact = self.Ntrain
 
             
         self.train_data = self.strategy.experimental_distribute_dataset(
              self.train_data
              #.map(self.train_data)
              .shuffle(self.Ntrain)
-             .batch(self.batch_size, drop_remainder=False)
+             .batch(self.batch_size, drop_remainder=True)
              .prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
              )
         
@@ -418,17 +457,18 @@ class NeuralNetworkTrainer:
             self.test_data
             #.map(self.test_data)
             .shuffle(self.Ntest)
-            .batch(self.batch_size, drop_remainder=False)
+            .batch(self.batch_size, drop_remainder=True)
             .prefetch(buffer_size=tf.data.experimental.AUTOTUNE))
   
         
         with self.strategy.scope():
+                        
             self.optimizer = tf.keras.optimizers.Adam(self.lr)
             self.ml_model.compile(optimizer=self.optimizer)
                 
         self.initialize_metrics()
         
-        print("lr, batch size, Ntrain, Ntest", 
+        print("lr, batch size, Ntrain, Nval", 
               self.lr, self.batch_size, self.Ntrain, self.Ntest)
         print()
 
@@ -483,6 +523,8 @@ class NeuralNetworkTrainer:
         else:
             x = np.expand_dims(x, axis=2)
         
+        x = x[:,self.trim:]
+        
         dist = self.ml_model(tf.convert_to_tensor(
             self.normalize(x, self.xscalar_mean, self.xscalar_var)), 
             training=False)
@@ -519,8 +561,7 @@ class NeuralNetworkTrainer:
                 
         for los in range(sightlines_to_plot):
             
-            ax[los*2].step(axis, x[los], where='mid', linestyle='-', 
-                            linewidth=2, color='black', alpha=1)
+            ax[los*2].step(axis, x[los], where='mid', linestyle='-', linewidth=2, color='black', alpha=1)
             ax[los*2].set_xlim(np.min(axis), np.max(axis))
             ax[los*2].set_ylabel(self.input_quantity)
             if self.input_quantity=='opt':
@@ -551,14 +592,13 @@ class NeuralNetworkTrainer:
             np.save(f, mean)
             np.save(f, upper_1sigma)
             np.save(f, lower_1sigma)
-        
                    
     
     def predict(self, dpp):
-                
+        
         self.read_scalars_file()
         if self.input_quantity == "flux":
-            self.x += self.n*np.random.normal(0, 1, np.shape(self.x))
+            self.x += self.n * np.random.normal(0, 1, np.shape(self.x))
            
         sightline_per_model = np.int32(self.x.shape[0] / len(self.files_list))
         
@@ -568,8 +608,8 @@ class NeuralNetworkTrainer:
         
         for mi, file in enumerate(self.files_list):
             print()
-            x = self.x[mi*sightline_per_model:(mi+1)*sightline_per_model]
-            y = self.y[mi*sightline_per_model:(mi+1)*sightline_per_model]
+            x = self.x[mi*sightline_per_model:(mi+1)*sightline_per_model,self.trim:]
+            y = self.y[mi*sightline_per_model:(mi+1)*sightline_per_model,self.trim:]
             
             dist = self.ml_model(tf.convert_to_tensor(
                 self.normalize(x, self.xscalar_mean, self.xscalar_var)), 
@@ -620,9 +660,12 @@ class NeuralNetworkTrainer:
                 ax[los*2+1].fill_between(axis, upper_1sigma[los], y2=lower_1sigma[los],
                                      color='red', alpha=.2)
                 ax[los*2+1].set_xlim(np.min(axis), np.max(axis))
+                
                 ax[los*2+1].set_ylabel(self.output_quantity)
                 if self.output_quantity=='opt':
                     ax[los*2+1].set_yscale('log')
+                if self.output_quantity=="tempw":
+                    ax[los*2+1].set_ylim(3.4, 4.8)
 
 
             fig.savefig(self.output_dir+'los_'+self.input_quantity+'_'+
