@@ -1,0 +1,49 @@
+########################################################################################
+Optuna 100 Trails Results with Sherwood Simulations at RAVEN - MPCDF
+Random seed set as 12345
+Number of devices: 4
+
+########################################################################################
+
+network, layers, features, units, L2_factor
+ResNet [4 4 4 4 4] [ 32  32  64 128 256] 978 0.002139463021259485
+lr, batch size, Ntrain, Nval 0.001977081807698123 1024 48000 12000
+Best value: -0.5784043388132669
+saving file.. ml_outputs_mflux0.4255_fwhm6.00_bins978_noise0.02_z4.00//hyperparams_search_flux_densityw.pkl
+
+
+network, layers, features, units, L2_factor
+ResNet [4 4 4 4 4 4] [ 8 16 32 32 32 64] 978 0.0008702202857950019
+lr, batch size, Ntrain, Nval 0.008344311976051623 1024 48000 12000
+Best value: 0.015826908844867853
+saving file.. ml_outputs_mflux0.4255_fwhm6.00_bins978_noise0.02_z4.00//hyperparams_search_flux_tempw.pkl
+
+########################################################################################
+
+network, layers, features, units, L2_factor
+ResNet [3 4 4 4 4] [ 16  32  32  64 128] 1014 0.00035554766343446145
+lr, batch size, Ntrain, Nval 0.0061342548740313824 1024 48000 12000
+Best value: -0.5029796472432816
+saving file.. ml_outputs_mflux0.3216_fwhm6.00_bins1014_noise0.02_z4.40//hyperparams_search_flux_densityw.pkl
+
+
+network, layers, features, units, L2_factor
+ResNet [3 3 3 4 4 4] [ 16  32  32  64 128 256] 1014 0.004584812062696997
+lr, batch size, Ntrain, Nval 0.009920459822743056 2048 48000 12000
+Best value: 0.05994010865100507
+saving file.. ml_outputs_mflux0.3216_fwhm6.00_bins1014_noise0.02_z4.40//hyperparams_search_flux_tempw.pkl
+
+########################################################################################
+
+network, layers, features, units, L2_factor
+ResNet [2 4 4 4] [ 16  32  64 128] 1067 0.004690847139052772
+lr, batch size, Ntrain, Nval 0.0015509451475888292 1024 48000 12000
+Best value: -0.0617633308331991
+saving file.. ml_outputs_mflux0.1350_fwhm6.00_bins1067_noise0.02_z5.00//hyperparams_search_flux_densityw.pkl
+
+
+network, layers, features, units, L2_factor
+ResNet [3 3 3 4 4 4] [ 32  32  32  32  64 128] 1067 0.007472032510301635
+lr, batch size, Ntrain, Nval 0.01585804230988153 4096 48000 12000
+Best value: 0.4124057987860239
+saving file.. ml_outputs_mflux0.1350_fwhm6.00_bins1067_noise0.02_z5.00//hyperparams_search_flux_tempw.pkl
