@@ -7,9 +7,9 @@ class UtilityFunctions:
     def read_quasar_file(self, filename):
         
         if os.path.exists(filename):
+            print('reading quasar file',filename)
             data = np.load(filename,'rb')
             flux = data["flux_obs"]
-            data = np.load(filename,'rb')
             # update mean for flux, fwhm and noise
             mean_flux = data["mean_flux"]
             fwhm = data["fwhm"]
@@ -17,6 +17,7 @@ class UtilityFunctions:
             bins = data["bins"]
             flux_level = data["flux_level"]
             noise_level = data["noise_level"]
+            #print(mean_flux, fwhm, noise, bins,flux_level,  noise_level)
         else:
             raise ValueError('file: {infilename} doest not exist' )
 
