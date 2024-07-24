@@ -28,8 +28,8 @@ def main():
     parser.add_argument("--load_study", action='store_true', default=False)
     parser.add_argument("--study_file", default="hyperparams_search")
     parser.add_argument("--trails", default="100")
-    parser.add_argument("--search_epochs", default="10")
-    parser.add_argument("--search_patience_epochs", default="100")
+    parser.add_argument("--search_epochs", default="100")
+    parser.add_argument("--search_patience_epochs", default="10")
 
 
     # TRAIN SEARCH PARAMS
@@ -47,15 +47,16 @@ def main():
     # results from Optuna search
     parser.add_argument("--network", default="ResNet")
     parser.add_argument("--trim", default="16")
-    parser.add_argument("--lr", default="0.008")
-    parser.add_argument("--l2_factor", default="0.0008")
+    parser.add_argument("--lr", default="0.008344311976051623")
+    parser.add_argument("--l2_factor", default="0.0008702202857950019")
     parser.add_argument("--batch_size", default="1024")
     parser.add_argument("--noweights", default=True)
+    parser.add_argument("--only_predict", default=False)
     parser.add_argument('--layers_per_block', action='store',
-                        default=[2, 2], type=int, nargs='*'
+                        default=[2], type=int, nargs='*'
                         )
     parser.add_argument('--features_per_block', action='store', 
-                        default=[32, 64], type=int, nargs='*'
+                        default=[32], type=int, nargs='*'
                         )
 
 
@@ -127,51 +128,52 @@ def main():
           )
 
     ##################################################################################
-    
-    print()
-    print('MAKING DATASET..')
-
-    # collect, normalize and shape data for training and validation
-    dp = DataProcessor(dataset_dir, args.dataset_file_filter, args.quasar,
-                        output_dir, input_quantity, output_quantity, args.noweights,
-                        redshift, skewer_length, hubble, omegam, fwhm, bins, mean_flux,
-                        noise, seed_int)
-
-    dp.make_dataset(True)
-    
-    # if grid search is true replace the hyperparams using grid search
-    if args.grid_search:
+    if args.only_predict==True:
         print()
-        print('GRID SEARCH..')
-        opt = OptunaTrainer(dp.get_output_dir(), redshift, dp.get_files_list(),
-                            study_file, args.load_study,
-                            input_quantity, output_quantity,
-                            seed_int, trails,
-                            search_epochs, search_patience_epochs,
-                            train_fraction, dp.get_dataset(),
-                            dp.get_post_file_name(), noise)
-
-        network, lr, batch_size, layers_per_block, \
-            features_per_block, l2_factor = opt.run_trails()
-            
-        del opt
-
-
-    print()
-    print('ML TRAINING..')
-    nnt = NeuralNetworkTrainer(dp.get_output_dir(), redshift, network,
-                               seed_int, args.load_best_model,
-                               input_quantity, output_quantity)
+        print('MAKING DATASET..')
     
-    nnt.set_dataset(dp.get_dataset(), dp.get_files_list(),
-                    dp.get_post_file_name(), noise,
-                      None, None, train_fraction)
-
-    nnt.set_ml_model(trim, layers_per_block, features_per_block, l2_factor)
-    nnt.train(True, epochs, patience_epochs, batch_size, lr)
-
-    del dp
-    del nnt
+        # collect, normalize and shape data for training and validation
+        dp = DataProcessor(dataset_dir, args.dataset_file_filter, args.quasar,
+                            output_dir, input_quantity, output_quantity, args.noweights,
+                            redshift, skewer_length, hubble, omegam, fwhm, bins, mean_flux,
+                            noise, seed_int)
+    
+        dp.make_dataset(True)
+        
+        # if grid search is true replace the hyperparams using grid search
+        if args.grid_search:
+            print()
+            print('GRID SEARCH..')
+            opt = OptunaTrainer(dp.get_output_dir(), redshift, dp.get_files_list(),
+                                study_file, args.load_study,
+                                input_quantity, output_quantity,
+                                seed_int, trails,
+                                search_epochs, search_patience_epochs,
+                                train_fraction, dp.get_dataset(),
+                                dp.get_post_file_name(), noise)
+    
+            network, lr, batch_size, layers_per_block, \
+                features_per_block, l2_factor = opt.run_trails()
+                
+            del opt
+    
+    
+        print()
+        print('ML TRAINING..')
+        nnt = NeuralNetworkTrainer(dp.get_output_dir(), redshift, network,
+                                   seed_int, args.load_best_model,
+                                   input_quantity, output_quantity)
+        
+        nnt.set_dataset(dp.get_dataset(), dp.get_files_list(),
+                        dp.get_post_file_name(), noise,
+                          None, None, train_fraction)
+    
+        nnt.set_ml_model(trim, layers_per_block, features_per_block, l2_factor)
+        nnt.train(True, epochs, patience_epochs, batch_size, lr)
+    
+        del dp
+        del nnt
+    
     ###########################################################################
     
     print()
