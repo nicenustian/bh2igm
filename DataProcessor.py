@@ -298,7 +298,7 @@ class DataProcessor:
         
         self.xmean = xscaler.mean_
         self.xvar = xscaler.var_
-                
+        
         save_file = self.output_dir+'scaler_'+self.input_quantity+'_'+self.output_quantity
         with open(save_file, 'wb') as f:
             np.save(f, xscaler.mean_)
@@ -355,7 +355,7 @@ class DataProcessor:
             index[i] = (i%self.total_models) * sightline_per_model + \
             np.int32(i/self.total_models)
          
-        self.index = index.astype('int')    
+        self.index = index.astype('int')
         self.xdataset = self.xdataset[self.index]
         self.ydataset = self.ydataset[self.index]
         self.ndataset = self.ndataset[self.index]
