@@ -5,6 +5,7 @@ from scipy.ndimage import convolve1d
 from typing import NoReturn, Tuple
 from UtilityFunctions import UtilityFunctions
 import warnings
+import copy
 
 
 class DataProcessor:
@@ -73,14 +74,11 @@ class DataProcessor:
     def get_output_dir(self) -> str:
         return self.output_dir
     
-    
     def get_post_file_name(self) -> str:
         return self.post_output
     
-    
     def get_files_list(self) -> str:
         return self.files_list
-    
     
     def get_dataset(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, 
                                    np.ndarray, float, float]:
@@ -149,6 +147,7 @@ class DataProcessor:
     
     
     def read_skewers(self) -> NoReturn:
+        
         # check if the file exists, and if not, raise error
         filename = self.dataset_dir+self.filename
         
@@ -253,12 +252,15 @@ class DataProcessor:
         
         iteration = 0
         fdiff = 1
-        iterations_allowed = 1
+        iterations_allowed = 10
+        corr = 1.0 - 1.58e-5 * (1 + self.redshift) ** 5.63 if self.redshift <= 4.35 else 0.8        
+        mean_flux = copy.deepcopy(self.mean_flux)
 
-        while np.abs(fdiff)>1e-4 and iteration<iterations_allowed:
+
+        while np.abs(fdiff)>1e-3 and iteration<iterations_allowed:
             
             #STEP 1: Rescale flux
-            flux = np.exp(-self.uf.rescale_opt(opt, self.mean_flux)*opt)
+            flux = np.exp(-self.uf.rescale_opt(opt, mean_flux)*opt)
             
             #STEP 2: Convolve with Gaussian profile
             #sigma = 1 means it unchanged
@@ -267,12 +269,20 @@ class DataProcessor:
             #STEP 3: Rebin onto pixels
             #pixel size to sigma (based on FWHM) width sigma = FWHM/[2*(2*ln2)^1/2]  
             flux_rebin = self.rebin(flux_conv)
+            
+            #STEP 4: Apply continuum bias correction at z>=2
+            flux_rebin/=corr
 
             current_mean_flux = np.mean(flux_rebin)
             fdiff =  self.mean_flux - current_mean_flux
+            mean_flux += fdiff
             iteration += 1
-            self.mean_flux += fdiff
-            print('<F> difference =', fdiff, ', bins =', self.bins)
+            
+            print('<F>_obs', self.mean_flux, '<F> = ', 
+                  current_mean_flux, 'fdiff =', fdiff, 
+                  ', bins =', self.bins
+                  )
+            
         return flux_rebin
 
 
